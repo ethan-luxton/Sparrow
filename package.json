@@ -1,0 +1,44 @@
+{
+  "name": "sparrow",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "sparrow": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/cli.ts",
+    "run": "node dist/cli.js run",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "better-sqlite3": "^12.6.2",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "fs-extra": "^11.2.0",
+    "googleapis": "^170.1.0",
+    "mammoth": "^1.8.0",
+    "node-telegram-bot-api": "^0.63.0",
+    "openai": "^6.16.0",
+    "pdfkit": "^0.16.0",
+    "pdf-parse": "^1.1.1",
+    "prompts": "^2.4.2",
+    "winston": "^3.12.0",
+    "winston-daily-rotate-file": "^5.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/better-sqlite3": "^7.6.10",
+    "@types/fs-extra": "^11.0.4",
+    "@types/node": "^22.10.2",
+    "@types/node-telegram-bot-api": "^0.64.5",
+    "@types/pdfkit": "^0.13.3",
+    "@types/prompts": "^2.4.9",
+    "eslint": "^9.39.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.3"
+  }
+}
