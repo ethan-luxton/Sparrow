@@ -1,5 +1,6 @@
 import TelegramBot from 'node-telegram-bot-api';
 import os from 'node:os';
+import https from 'node:https';
 import { loadConfig, getSecret, redacted } from './config/config.js';
 import { ChatQueue } from './lib/queues.js';
 import { addMessage, clearChat, listNotes, addNote } from './lib/db.js';
@@ -8,6 +9,44 @@ import { buildToolRegistry } from './tools/index.js';
 import { logger } from './lib/logger.js';
 import { startHeartbeat } from './heartbeat.js';
 const queue = new ChatQueue();
+function boolFromEnv(value) {
+    if (!value)
+        return undefined;
+    const normalized = value.trim().toLowerCase();
+    if (['1', 'true', 'yes', 'on'].includes(normalized))
+        return true;
+    if (['0', 'false', 'no', 'off'].includes(normalized))
+        return false;
+    return undefined;
+}
+function numberFromEnv(value) {
+    if (!value)
+        return undefined;
+    const num = Number(value);
+    return Number.isFinite(num) ? num : undefined;
+}
+function buildTelegramOptions() {
+    const pollingIntervalMs = numberFromEnv(process.env.SPARROW_TELEGRAM_POLLING_INTERVAL_MS ?? process.env.TELEGRAM_POLLING_INTERVAL_MS);
+    const pollingTimeoutSec = numberFromEnv(process.env.SPARROW_TELEGRAM_POLLING_TIMEOUT_SEC ?? process.env.TELEGRAM_POLLING_TIMEOUT_SEC);
+    const proxyUrl = process.env.SPARROW_TELEGRAM_PROXY_URL ?? process.env.TELEGRAM_PROXY_URL;
+    const ipv4Only = boolFromEnv(process.env.SPARROW_TELEGRAM_IPV4_ONLY ?? process.env.TELEGRAM_IPV4_ONLY) ??
+        (process.platform === 'linux');
+    const options = { polling: true };
+    if (pollingIntervalMs || pollingTimeoutSec) {
+        options.polling = {
+            autoStart: true,
+            ...(pollingIntervalMs ? { interval: pollingIntervalMs } : {}),
+            ...(pollingTimeoutSec ? { params: { timeout: pollingTimeoutSec } } : {}),
+        };
+    }
+    if (proxyUrl || ipv4Only) {
+        options.request = {
+            ...(proxyUrl ? { proxy: proxyUrl } : {}),
+            ...(ipv4Only ? { agent: new https.Agent({ keepAlive: true, family: 4 }) } : {}),
+        };
+    }
+    return { options, diagnostics: { pollingIntervalMs, pollingTimeoutSec, proxy: Boolean(proxyUrl), ipv4Only } };
+}
 function chunkAndSend(bot, chatId, text) {
     const max = 3500;
     const parts = [];
@@ -21,13 +60,18 @@ function chunkAndSend(bot, chatId, text) {
         }
     })();
 }
-export function startTelegramBot() {
+export function startTelegramBot(opts) {
     const cfg = loadConfig();
     const botToken = getSecret(cfg, 'telegram.botToken');
-    const bot = new TelegramBot(botToken, { polling: true });
+    const { options, diagnostics } = buildTelegramOptions();
+    const bot = new TelegramBot(botToken, options);
     const openai = new OpenAIClient(cfg);
-    const tools = buildToolRegistry();
+    const tools = buildToolRegistry(cfg);
     startHeartbeat(bot, cfg);
+    if (opts?.debugIO) {
+        process.env.SPARROW_DEBUG_IO = '1';
+    }
+    logger.info(`Telegram options: ${JSON.stringify(diagnostics)}`);
     bot.onText(/^\/start/, (msg) => {
         bot.sendMessage(msg.chat.id, 'Sparrow ready. Send a message or /help for options.');
     });
@@ -76,9 +120,11 @@ export function startTelegramBot() {
         const chatId = msg.chat.id;
         queue.enqueue(chatId, async () => {
             try {
+                logger.info(`telegram.in chatId=${chatId} text=${msg.text}`);
                 addMessage(chatId, 'user', msg.text);
                 await bot.sendChatAction(chatId, 'typing');
                 const reply = await openai.chat(chatId, msg.text, tools);
+                logger.info(`telegram.out chatId=${chatId} chars=${reply.length}`);
                 await chunkAndSend(bot, chatId, reply);
             }
             catch (err) {
@@ -88,7 +134,12 @@ export function startTelegramBot() {
             }
         }).catch((err) => logger.error(`Queue error: ${err.message}`));
     });
-    bot.on('polling_error', (err) => logger.error(`Polling error: ${err.message}`));
+    bot.on('polling_error', (err) => {
+        logger.error(`Polling error: ${err?.message ?? String(err)}${err?.code ? ` code=${err.code}` : ''}${err?.response?.body ? ` response=${JSON.stringify(err.response.body)}` : ''}`);
+    });
+    bot.on('webhook_error', (err) => {
+        logger.error(`Webhook error: ${err?.message ?? String(err)}`);
+    });
     logger.info('Telegram bot started.');
     // Heartbeat handles autonomous check-ins
 }

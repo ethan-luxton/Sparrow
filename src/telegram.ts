@@ -70,14 +70,17 @@ function chunkAndSend(bot: TelegramBot, chatId: number, text: string) {
   })();
 }
 
-export function startTelegramBot() {
+export function startTelegramBot(opts?: { debugIO?: boolean }) {
   const cfg = loadConfig();
   const botToken = getSecret(cfg, 'telegram.botToken');
   const { options, diagnostics } = buildTelegramOptions();
   const bot = new TelegramBot(botToken, options);
   const openai = new OpenAIClient(cfg);
-  const tools = buildToolRegistry();
+  const tools = buildToolRegistry(cfg);
   startHeartbeat(bot, cfg);
+  if (opts?.debugIO) {
+    process.env.SPARROW_DEBUG_IO = '1';
+  }
   logger.info(`Telegram options: ${JSON.stringify(diagnostics)}`);
 
   bot.onText(/^\/start/, (msg) => {
@@ -136,9 +139,11 @@ export function startTelegramBot() {
     const chatId = msg.chat.id;
     queue.enqueue(chatId, async () => {
       try {
+        logger.info(`telegram.in chatId=${chatId} text=${msg.text}`);
         addMessage(chatId, 'user', msg.text!);
         await bot.sendChatAction(chatId, 'typing');
         const reply = await openai.chat(chatId, msg.text!, tools);
+        logger.info(`telegram.out chatId=${chatId} chars=${reply.length}`);
         await chunkAndSend(bot, chatId, reply);
       } catch (err) {
         const text = `Error: ${(err as Error).message}`;

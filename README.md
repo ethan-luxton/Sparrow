@@ -56,6 +56,7 @@ On some Linux setups, IPv6 or proxy settings can prevent Telegram long polling f
 ## CLI commands
 - `sparrow init` – interactive setup
 - `sparrow run` – start Telegram bot
+- `sparrow run --debug-io` – verbose input/output/tool logging
 - `sparrow config list|get|set` – manage config
 - `sparrow google-auth` – OAuth flow for Drive/Gmail
 - `sparrow tools list` – show available tools
