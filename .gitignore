@@ -13,3 +13,6 @@ coverage
 logs
 .sparrow
 .env
+./dist
+/dist
+dist

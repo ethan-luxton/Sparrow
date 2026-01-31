@@ -1,7 +1,8 @@
-import OpenAI from 'openai';
 import { ToolDefinition } from './registry.js';
 import { loadConfig, getSecret } from '../config/config.js';
 import { logger } from '../lib/logger.js';
+import OpenAI from 'openai';
+import { getSearchModel } from '../lib/llm.js';
 
 interface SearchArgs {
   query: string;
@@ -23,6 +24,7 @@ function extractFirstText(response: any): string {
 }
 
 type SourceLike = { title?: string; url?: string };
+type ResultLike = { title?: string; url?: string; snippet?: string };
 
 function extractSources(response: any): SourceLike[] {
   const sources: SourceLike[] = [];
@@ -36,8 +38,28 @@ function extractSources(response: any): SourceLike[] {
     const actionSources = item?.action?.sources;
     if (Array.isArray(actionSources)) actionSources.forEach(add);
     if (Array.isArray(item?.results)) item.results.forEach(add);
+    if (Array.isArray(item?.search_results)) item.search_results.forEach(add);
   }
   return sources;
+}
+
+function extractResults(response: any): ResultLike[] {
+  const results: ResultLike[] = [];
+  const add = (r?: any) => {
+    if (!r) return;
+    const title = r.title ?? r.name ?? r.heading;
+    const url = r.url ?? r.link;
+    const snippet = r.snippet ?? r.text ?? r.content ?? r.description ?? r.summary;
+    if (title || url || snippet) results.push({ title, url, snippet });
+  };
+  const output = response?.output ?? [];
+  for (const item of output) {
+    if (Array.isArray(item?.results)) item.results.forEach(add);
+    if (Array.isArray(item?.search_results)) item.search_results.forEach(add);
+    if (Array.isArray(item?.action?.results)) item.action.results.forEach(add);
+    if (item?.type === 'web_search_call' && Array.isArray(item?.results)) item.results.forEach(add);
+  }
+  return results;
 }
 
 /**
@@ -61,32 +83,26 @@ export function webSearchTool(): ToolDefinition {
     },
     handler: async (args: SearchArgs) => {
       const cfg = loadConfig();
-      const apiKey = getSecret(cfg, 'openai.apiKey');
-      const client = new OpenAI({ apiKey });
+      let apiKey = '';
+      try {
+        apiKey = getSecret(cfg, 'openai.apiKey');
+      } catch (err) {
+        return `Web search requires an OpenAI API key: ${(err as Error).message}`;
+      }
+      const baseURL = cfg.openai?.baseUrl ?? process.env.OPENAI_BASE_URL;
+      const client = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
 
-      const model = cfg.openai?.searchModel ?? 'gpt-5-mini';
+      const model = getSearchModel(cfg);
       const max = Math.min(Math.max(args.maxResults ?? 5, 1), 10);
       const locationNote = args.userLocation ? `User location: ${args.userLocation}.` : '';
+      const debugIO = process.env.SPARROW_DEBUG_IO === '1';
 
       try {
         const response = await client.responses.create({
           model,
-          input: [
-            {
-              role: 'system',
-              content:
-                'For user queries, you must perform a web_search at least once unless the query is strictly about yourself ' +
-                'or is simple arithmetic. Prefer fresh, authoritative sources. Keep response concise.',
-            },
-            { role: 'user', content: args.query },
-            {
-              role: 'system',
-              content:
-                `After searching, summarize in 3-5 sentences, then list 3-5 sources with title + URL. ` +
-                `Prefer authoritative, recent sources. Respect max results ${max}. ${locationNote}`,
-            },
-          ],
+          input: `${args.query}${locationNote ? `\n${locationNote}` : ''}\n\nSummarize results in 3-5 sentences and list 3-5 sources with title + URL.`,
           tools: [{ type: 'web_search' }],
+          tool_choice: { type: 'web_search' },
           max_output_tokens: 400,
           text: { format: { type: 'text' } },
           include: ['web_search_call.action.sources', 'web_search_call.results'],
@@ -94,16 +110,43 @@ export function webSearchTool(): ToolDefinition {
 
         const text = (response as any).output_text ?? extractFirstText(response);
         const sources = extractSources(response);
-
-        if (sources.length) {
-          const srcList = sources
-            .slice(0, 5)
-            .map((s) => `- ${s.title ?? s.url ?? 'source'}: ${s.url ?? ''}`)
-            .join('\n');
-          return `${text || 'No summary returned.'}\n\nSources:\n${srcList}`;
+        const results = extractResults(response);
+        if (debugIO) {
+          const outputTypes = (response as any)?.output?.map((o: any) => o?.type).filter(Boolean) ?? [];
+          logger.info(
+            `web_search.raw model=${model} outputTypes=${JSON.stringify(outputTypes)} sources=${sources.length} results=${results.length}`
+          );
         }
 
-        return text || 'No results returned from web search.';
+        const srcList = sources
+          .slice(0, 5)
+          .map((s) => `- ${s.title ?? s.url ?? 'source'}: ${s.url ?? ''}`)
+          .join('\n');
+
+        if (text && text.trim()) {
+          return sources.length ? `${text}\n\nSources:\n${srcList}` : text;
+        }
+
+        if (results.length || sources.length) {
+          const resultLines = results
+            .slice(0, 6)
+            .map((r, i) => `Result ${i + 1}: ${r.title ?? '(no title)'}\nURL: ${r.url ?? '(no url)'}\nSnippet: ${r.snippet ?? '(no snippet)'}`)
+            .join('\n\n');
+          const summaryResp = await client.responses.create({
+            model,
+            input:
+              `Summarize the following web search results in 3-5 sentences. ` +
+              `Only use the information provided. Query: ${args.query}\n\n${resultLines}`,
+            max_output_tokens: 250,
+            text: { format: { type: 'text' } },
+          } as any);
+          const summaryText = (summaryResp as any).output_text ?? extractFirstText(summaryResp);
+          if (summaryText && summaryText.trim()) {
+            return sources.length ? `${summaryText}\n\nSources:\n${srcList}` : summaryText;
+          }
+        }
+
+        return 'Web search returned no summary. Try a more specific query.';
       } catch (err) {
         // Log richer context for debugging while keeping the reply concise
         const e = err as any;

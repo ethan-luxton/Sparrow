@@ -1,9 +1,8 @@
 import fs from 'fs-extra';
 import path from 'node:path';
-import OpenAI from 'openai';
-import { getSecret } from './config/config.js';
 import { getLastMessageTimestamp, getLastCheckin, setLastCheckin, listChats, getMessages, getUserProfile, setUserProfile } from './lib/db.js';
 import { logger } from './lib/logger.js';
+import { createChatClient, getChatModel } from './lib/llm.js';
 const HEARTBEAT_PATH = path.resolve(process.cwd(), 'heartbeat.md');
 function loadHeartbeatGuide() {
     try {
@@ -50,7 +49,7 @@ async function runHeartbeatForChat(chatId, bot, client, cfg, guide, intervalMs, 
     const recent = formatRecentMessages(chatId, 12);
     try {
         const completion = await client.chat.completions.create({
-            model: cfg.openai?.model ?? 'gpt-5-mini',
+            model: getChatModel(cfg),
             messages: [
                 {
                     role: 'system',
@@ -89,8 +88,7 @@ async function runHeartbeatForChat(chatId, bot, client, cfg, guide, intervalMs, 
     }
 }
 export function startHeartbeat(bot, cfg) {
-    const apiKey = getSecret(cfg, 'openai.apiKey');
-    const client = new OpenAI({ apiKey });
+    const client = createChatClient(cfg);
     const guide = loadHeartbeatGuide();
     const intervalMs = (cfg.bot?.heartbeatIntervalHours ?? cfg.bot?.checkinIntervalHours ?? 24) * 60 * 60 * 1000;
     const maxTokens = cfg.bot?.heartbeatMaxTokens ?? 180;

@@ -63,6 +63,9 @@ export function loadConfig() {
         existing.openai.model = normalizeModel(existing.openai.model);
         existing.openai.searchModel = normalizeModel(existing.openai.searchModel);
     }
+    if (process.env.OPENAI_BASE_URL) {
+        existing.openai = { ...(existing.openai ?? {}), baseUrl: process.env.OPENAI_BASE_URL };
+    }
     // inject env overrides for clientId if provided
     if (process.env.GOOGLE_CLIENT_ID) {
         existing.google = { ...(existing.google ?? {}), clientId: process.env.GOOGLE_CLIENT_ID };

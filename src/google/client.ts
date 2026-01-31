@@ -1,8 +1,8 @@
 import { google } from 'googleapis';
-import { IronclerkConfig, getSecret, saveConfig, setSecret } from '../config/config.js';
+import { SparrowConfig, getSecret, saveConfig, setSecret } from '../config/config.js';
 import { logger } from '../lib/logger.js';
 
-export function buildOAuthClient(cfg: IronclerkConfig) {
+export function buildOAuthClient(cfg: SparrowConfig) {
   const clientId = cfg.google?.clientId;
   if (!clientId) throw new Error('Google clientId missing. Run `sparrow google auth`.');
   const clientSecret = getSecret(cfg, 'google.clientSecret');

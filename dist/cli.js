@@ -63,9 +63,14 @@ program
 program
     .command('run')
     .description('Start Telegram bot (long polling)')
-    .action(() => {
+    .option('--debug-io', 'Log detailed input/output and tool usage')
+    .action((options) => {
     logAction('cli.run.start');
-    startTelegramBot();
+    if (options?.debugIo) {
+        process.env.SPARROW_DEBUG_IO = '1';
+        logger.info('cli.run.debug_io enabled');
+    }
+    startTelegramBot({ debugIO: Boolean(options?.debugIo) });
 });
 program
     .command('chat [message]')
@@ -77,7 +82,7 @@ program
     logAction('cli.chat.start', { mode, chatId });
     const cfg = loadConfig();
     const openai = new OpenAIClient(cfg);
-    const tools = buildToolRegistry();
+    const tools = buildToolRegistry(cfg);
     const send = async (text) => {
         try {
             addMessage(chatId, 'user', text);
@@ -258,7 +263,7 @@ program
     .command('tools list')
     .description('List available tools and permissions')
     .action(() => {
-    const registry = buildToolRegistry();
+    const registry = buildToolRegistry(loadConfig());
     logAction('cli.tools.list', { count: registry.list().length });
     registry.list().forEach((t) => {
         console.log(`${t.name} [${t.permission}] - ${t.description}`);

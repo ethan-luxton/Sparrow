@@ -1,20 +1,38 @@
-import OpenAI from 'openai';
 import { SYSTEM_PROMPT } from './prompt.js';
 import { getMessages, addMessage, getUserProfile, listNotes } from './db.js';
-import { getSecret, IronclerkConfig } from '../config/config.js';
+import { SparrowConfig } from '../config/config.js';
 import { logger } from './logger.js';
 import { ToolRegistry } from '../tools/registry.js';
 import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions';
 import fs from 'fs-extra';
 import path from 'node:path';
+import { createChatClient, getChatModel, supportsTools } from './llm.js';
+import type OpenAI from 'openai';
+
+function summarize(text: string, maxLen: number) {
+  if (text.length <= maxLen) return text;
+  return text.slice(0, maxLen) + '…';
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number) {
+  if (!Number.isFinite(ms) || ms <= 0) return promise;
+  let timeout: NodeJS.Timeout | undefined;
+  const timer = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => reject(new Error(`Model request timed out after ${ms}ms`)), ms);
+  });
+  try {
+    return await Promise.race([promise, timer]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
 
 export class OpenAIClient {
   private client: OpenAI;
-  private cfg: IronclerkConfig;
+  private cfg: SparrowConfig;
 
-  constructor(cfg: IronclerkConfig) {
-    const apiKey = getSecret(cfg, 'openai.apiKey');
-    this.client = new OpenAI({ apiKey });
+  constructor(cfg: SparrowConfig) {
+    this.client = createChatClient(cfg);
     this.cfg = cfg;
   }
 
@@ -30,7 +48,9 @@ export class OpenAIClient {
     const user = this.cfg.user;
     const personality = loadPersonalityGuide();
     const notes = listNotes(chatId, 3);
-    const openaiMsgs: ChatCompletionMessageParam[] = [
+    const model = getChatModel(this.cfg);
+    const debugIO = process.env.SPARROW_DEBUG_IO === '1';
+    const baseMsgs: ChatCompletionMessageParam[] = [
       { role: 'system', content: SYSTEM_PROMPT },
       ...(personality ? ([{ role: 'system', content: `Personality guide:\n${personality}` }] as ChatCompletionMessageParam[]) : []),
       ...(assistant
@@ -84,17 +104,27 @@ export class OpenAIClient {
       { role: 'user', content: userText },
     ];
 
-    const toolDefs: ChatCompletionTool[] = tools.asOpenAITools();
-    // Let the model know explicitly which tools exist and when to use them.
-    openaiMsgs.push({
-      role: 'system',
-      content: `Available tools: ${toolDefs
-        .map((t) => (t as any).function?.name ?? '')
-        .filter(Boolean)
-        .join(
-          ', '
-        )}. Use them when they help, especially web_search for live info. If a tool has an action field, choose the most appropriate action yourself; only ask the user if required inputs are missing. Minimize tool calls and avoid redundant steps.`,
-    });
+    const allowTools = supportsTools(this.cfg);
+    const toolDefs: ChatCompletionTool[] = allowTools ? tools.asOpenAITools() : [];
+    const openaiMsgs: ChatCompletionMessageParam[] = [...baseMsgs];
+    logger.info(
+      `chat.in chatId=${chatId} model=${model} tools=${toolDefs.length} text=${summarize(
+        userText,
+        debugIO ? 4000 : 400
+      )}`
+    );
+    if (toolDefs.length) {
+      // Let the model know explicitly which tools exist and when to use them.
+      openaiMsgs.push({
+        role: 'system',
+        content: `Available tools: ${toolDefs
+          .map((t) => (t as any).function?.name ?? '')
+          .filter(Boolean)
+          .join(
+            ', '
+          )}. Use them when they help. If a tool has an action field, choose the most appropriate action yourself; only ask the user if required inputs are missing. Minimize tool calls and avoid redundant steps.`,
+      });
+    }
 
     const accumulated: ChatCompletionMessageParam[] = [...openaiMsgs];
 
@@ -103,21 +133,45 @@ export class OpenAIClient {
     const seenToolCalls = new Set<string>();
 
     while (true) {
-      const completion = await this.client.chat.completions.create({
-        model: this.cfg.openai?.model ?? 'gpt-5-mini',
+      const request: any = {
+        model,
         messages: accumulated,
-        tools: toolDefs,
-        tool_choice: 'auto',
-      });
+      };
+      if (toolDefs.length) {
+        request.tools = toolDefs;
+        request.tool_choice = 'auto';
+      }
+      const timeoutMs = Number(process.env.SPARROW_MODEL_TIMEOUT_MS ?? 120000);
+      const completion = await withTimeout(this.client.chat.completions.create(request), timeoutMs);
 
       const msg = completion.choices[0].message;
       if (!msg) throw new Error('No completion message');
+      if (debugIO) {
+        logger.info(
+          `chat.raw chatId=${chatId} finish=${completion.choices[0].finish_reason ?? 'n/a'} content=${summarize(
+            msg.content ?? '',
+            2000
+          )}`
+        );
+      }
 
       if (msg.tool_calls && msg.tool_calls.length > 0) {
+        if (!toolDefs.length) {
+          const text = 'Tool calls are disabled for the current model configuration.';
+          addMessage(chatId, 'assistant', text);
+          logger.warn(`chat.tool_calls_blocked chatId=${chatId} model=${model}`);
+          return text;
+        }
+        const toolNames = msg.tool_calls
+          .map((c) => (c.type === 'function' ? c.function?.name : undefined))
+          .filter(Boolean)
+          .join(',');
+        logger.info(`chat.tool_calls chatId=${chatId} count=${msg.tool_calls.length} tools=${toolNames}`);
         toolIterations += 1;
         if (toolIterations > maxToolIterations) {
           const halt = 'Tool call limit reached; please clarify or simplify the request.';
           addMessage(chatId, 'assistant', halt);
+          logger.warn(`chat.tool_limit chatId=${chatId} limit=${maxToolIterations}`);
           return halt;
         }
         // Store the assistant tool request
@@ -150,7 +204,14 @@ export class OpenAIClient {
       }
 
       const content = msg.content ?? '';
+      if (!content.trim()) {
+        const fallback = 'No response generated by the model.';
+        addMessage(chatId, 'assistant', fallback);
+        logger.warn(`chat.empty_response chatId=${chatId} model=${model}`);
+        return fallback;
+      }
       addMessage(chatId, 'assistant', content);
+      logger.info(`chat.out chatId=${chatId} chars=${content.length} text=${summarize(content, debugIO ? 4000 : 400)}`);
       return content;
     }
   }

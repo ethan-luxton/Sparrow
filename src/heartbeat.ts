@@ -1,10 +1,11 @@
 import fs from 'fs-extra';
 import path from 'node:path';
 import TelegramBot from 'node-telegram-bot-api';
-import OpenAI from 'openai';
-import { IronclerkConfig, getSecret } from './config/config.js';
+import type OpenAI from 'openai';
+import { SparrowConfig } from './config/config.js';
 import { getLastMessageTimestamp, getLastCheckin, setLastCheckin, listChats, getMessages, getUserProfile, setUserProfile } from './lib/db.js';
 import { logger } from './lib/logger.js';
+import { createChatClient, getChatModel } from './lib/llm.js';
 
 const HEARTBEAT_PATH = path.resolve(process.cwd(), 'heartbeat.md');
 
@@ -41,7 +42,7 @@ async function runHeartbeatForChat(
   chatId: number,
   bot: TelegramBot,
   client: OpenAI,
-  cfg: IronclerkConfig,
+  cfg: SparrowConfig,
   guide: string,
   intervalMs: number,
   maxTokens: number
@@ -60,7 +61,7 @@ async function runHeartbeatForChat(
 
   try {
     const completion = await client.chat.completions.create({
-      model: cfg.openai?.model ?? 'gpt-5-mini',
+      model: getChatModel(cfg),
       messages: [
         {
           role: 'system',
@@ -104,9 +105,8 @@ async function runHeartbeatForChat(
   }
 }
 
-export function startHeartbeat(bot: TelegramBot, cfg: IronclerkConfig) {
-  const apiKey = getSecret(cfg, 'openai.apiKey');
-  const client = new OpenAI({ apiKey });
+export function startHeartbeat(bot: TelegramBot, cfg: SparrowConfig) {
+  const client = createChatClient(cfg);
   const guide = loadHeartbeatGuide();
   const intervalMs = (cfg.bot?.heartbeatIntervalHours ?? cfg.bot?.checkinIntervalHours ?? 24) * 60 * 60 * 1000;
   const maxTokens = cfg.bot?.heartbeatMaxTokens ?? 180;

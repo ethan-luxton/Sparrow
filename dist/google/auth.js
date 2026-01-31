@@ -26,7 +26,7 @@ export async function runGoogleAuth(cfg) {
     const redirectUri = cfg.google?.redirectUri ?? 'urn:ietf:wg:oauth:2.0:oob';
     const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
     const authUrl = oauth2Client.generateAuthUrl({ access_type: 'offline', scope: scopes, prompt: 'consent' });
-    console.log('\nOpen this URL in your browser to authorize Ironclerk:');
+    console.log('\nOpen this URL in your browser to authorize Sparrow:');
     console.log(authUrl);
     const { code } = await prompts({ type: 'text', name: 'code', message: 'Paste the authorization code' });
     if (!code)

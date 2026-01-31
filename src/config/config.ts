@@ -11,7 +11,7 @@ export type SecretField =
   | 'n8n.basicUser'
   | 'n8n.basicPass';
 
-export interface IronclerkConfig {
+export interface SparrowConfig {
   encryption: {
     salt: string;
     iterations?: number;
@@ -32,6 +32,7 @@ export interface IronclerkConfig {
     apiKeyEnc?: string;
     model?: string;
     searchModel?: string;
+    baseUrl?: string;
   };
   telegram?: {
     botTokenEnc?: string;
@@ -64,7 +65,7 @@ export interface IronclerkConfig {
   };
 }
 
-const defaultConfig: IronclerkConfig = {
+const defaultConfig: SparrowConfig = {
   encryption: {
     salt: generateSalt(),
   },
@@ -109,13 +110,13 @@ function ensureDirs() {
   fs.ensureDirSync(sandboxDir);
 }
 
-export function loadConfig(): IronclerkConfig {
+export function loadConfig(): SparrowConfig {
   ensureDirs();
   if (!fs.existsSync(configPath)) {
     fs.writeJSONSync(configPath, defaultConfig, { spaces: 2 });
     return { ...defaultConfig };
   }
-  const existing = fs.readJSONSync(configPath) as IronclerkConfig;
+  const existing = fs.readJSONSync(configPath) as SparrowConfig;
 
   // Normalize legacy model names: force everything to gpt-5-mini
   const normalizeModel = (model?: string) => {
@@ -126,6 +127,9 @@ export function loadConfig(): IronclerkConfig {
   if (existing.openai) {
     existing.openai.model = normalizeModel(existing.openai.model);
     existing.openai.searchModel = normalizeModel(existing.openai.searchModel);
+  }
+  if (process.env.OPENAI_BASE_URL) {
+    existing.openai = { ...(existing.openai ?? {}), baseUrl: process.env.OPENAI_BASE_URL };
   }
   // inject env overrides for clientId if provided
   if (process.env.GOOGLE_CLIENT_ID) {
@@ -149,7 +153,7 @@ export function loadConfig(): IronclerkConfig {
   };
 }
 
-export function saveConfig(cfg: IronclerkConfig) {
+export function saveConfig(cfg: SparrowConfig) {
   ensureDirs();
   fs.writeJSONSync(configPath, cfg, { spaces: 2 });
 }
@@ -160,7 +164,7 @@ export function requireSecret(): string {
   return secret;
 }
 
-function resolveCtx(cfg: IronclerkConfig) {
+function resolveCtx(cfg: SparrowConfig) {
   return { salt: cfg.encryption.salt, iterations: cfg.encryption.iterations };
 }
 
@@ -186,17 +190,17 @@ function envFallback(field: SecretField): string | undefined {
   }
 }
 
-export function setSecret(cfg: IronclerkConfig, field: SecretField, value: string): IronclerkConfig {
+export function setSecret(cfg: SparrowConfig, field: SecretField, value: string): SparrowConfig {
   const secret = requireSecret();
   const ctx = resolveCtx(cfg);
   const enc = encryptText(value, secret, ctx);
-  const clone: IronclerkConfig = { ...cfg };
-  const [group, key] = field.split('.') as [keyof IronclerkConfig, string];
+  const clone: SparrowConfig = { ...cfg };
+  const [group, key] = field.split('.') as [keyof SparrowConfig, string];
   clone[group] = { ...(clone[group] as Record<string, unknown>), [`${key}Enc`]: enc } as any;
   return clone;
 }
 
-export function getSecret(cfg: IronclerkConfig, field: SecretField): string {
+export function getSecret(cfg: SparrowConfig, field: SecretField): string {
   const env = envFallback(field);
   if (env) return env;
   // allow .env OPENAI_SEARCH_MODEL override for search model
@@ -205,15 +209,15 @@ export function getSecret(cfg: IronclerkConfig, field: SecretField): string {
   }
   const secret = requireSecret();
   const ctx = resolveCtx(cfg);
-  const [group, key] = field.split('.') as [keyof IronclerkConfig, string];
+  const [group, key] = field.split('.') as [keyof SparrowConfig, string];
   const groupObj = cfg[group] as Record<string, unknown> | undefined;
   const enc = groupObj?.[`${key}Enc`];
   if (!enc || typeof enc !== 'string') throw new Error(`Secret ${field} not configured`);
   return decryptText(enc, secret, ctx);
 }
 
-export function redacted(cfg: IronclerkConfig) {
-  const clone = JSON.parse(JSON.stringify(cfg)) as IronclerkConfig;
+export function redacted(cfg: SparrowConfig) {
+  const clone = JSON.parse(JSON.stringify(cfg)) as SparrowConfig;
   if (clone.openai?.apiKeyEnc) clone.openai.apiKeyEnc = '***';
   if (clone.telegram?.botTokenEnc) clone.telegram.botTokenEnc = '***';
   if (clone.google?.clientSecretEnc) clone.google.clientSecretEnc = '***';
