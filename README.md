@@ -46,6 +46,13 @@ node dist/cli.js run
 ```
 Bot uses Telegram long polling and persists chat history in `~/.sparrow/sparrow.db`.
 
+### Linux / networking notes
+On some Linux setups, IPv6 or proxy settings can prevent Telegram long polling from connecting. Sparrow now supports a few env toggles:
+- `SPARROW_TELEGRAM_IPV4_ONLY=1` (default on Linux) forces IPv4 for Telegram requests.
+- `SPARROW_TELEGRAM_PROXY_URL=http://user:pass@host:port` to use a proxy.
+- `SPARROW_TELEGRAM_POLLING_INTERVAL_MS=1000` to adjust polling interval.
+- `SPARROW_TELEGRAM_POLLING_TIMEOUT_SEC=30` to adjust long-poll timeout.
+
 ## CLI commands
 - `sparrow init` – interactive setup
 - `sparrow run` – start Telegram bot
