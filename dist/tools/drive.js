@@ -26,7 +26,7 @@ function assertWithinBase(target, base) {
 export function googleDriveTool() {
     return {
         name: 'google_drive',
-        description: 'Interact with Google Drive: list, search, metadata, export docs, upload, create folders.',
+        description: 'Interact with Google Drive: list, search, metadata, export docs, extract text, upload, create docs/folders. Write actions (upload/create/delete/download) require confirm=true.',
         permission: 'write',
         schema: {
             type: 'object',

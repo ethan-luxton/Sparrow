@@ -31,7 +31,7 @@ function assertWithinBase(target, base) {
 export function filesystemTool() {
     return {
         name: 'filesystem',
-        description: 'Safe local file access restricted to ~/.sparrow only.',
+        description: 'Safe local file access restricted to ~/.sparrow only. read/list/read_pdf_text/read_docx_text are read-only; write/write_pdf require confirm=true.',
         permission: 'write',
         schema: {
             type: 'object',

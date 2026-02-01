@@ -8,6 +8,8 @@ import { OpenAIClient } from './lib/openaiClient.js';
 import { buildToolRegistry } from './tools/index.js';
 import { logger } from './lib/logger.js';
 import { startHeartbeat } from './heartbeat.js';
+import { AgentRuntime } from './agent/runtime.js';
+import { AgentLLM } from './agent/llm.js';
 
 const queue = new ChatQueue();
 
@@ -70,13 +72,31 @@ function chunkAndSend(bot: TelegramBot, chatId: number, text: string) {
   })();
 }
 
+function summarizeLog(text: string, maxLen = 200) {
+  if (text.length <= maxLen) return text;
+  return text.slice(0, maxLen) + '…';
+}
+
 export function startTelegramBot(opts?: { debugIO?: boolean }) {
   const cfg = loadConfig();
   const botToken = getSecret(cfg, 'telegram.botToken');
   const { options, diagnostics } = buildTelegramOptions();
   const bot = new TelegramBot(botToken, options);
-  const openai = new OpenAIClient(cfg);
   const tools = buildToolRegistry(cfg);
+  const openai = new OpenAIClient(cfg);
+  const llm = new AgentLLM(cfg);
+  const runtime = new AgentRuntime({
+    tools,
+    llm,
+    notify: async (chatId, text) => {
+      logger.info(`telegram.out chatId=${chatId} chars=${text.length} text=${summarizeLog(text)}`);
+      await chunkAndSend(bot, chatId, text);
+    },
+    options: {
+      tickMaxToolCalls: cfg.agent?.tickMaxToolCalls,
+      tickMaxTokens: cfg.agent?.tickMaxTokens,
+    },
+  });
   startHeartbeat(bot, cfg, { queue });
   if (opts?.debugIO) {
     process.env.SPARROW_DEBUG_IO = '1';
@@ -115,6 +135,21 @@ export function startTelegramBot(opts?: { debugIO?: boolean }) {
     bot.sendMessage(msg.chat.id, 'Conversation reset for this chat.');
   });
 
+  bot.onText(/^\/pause/, (msg) => {
+    runtime.pause(msg.chat.id);
+    bot.sendMessage(msg.chat.id, 'Paused.');
+  });
+
+  bot.onText(/^\/resume/, (msg) => {
+    runtime.resume(msg.chat.id);
+    bot.sendMessage(msg.chat.id, 'Resumed.');
+  });
+
+  bot.onText(/^\/cancel/, (msg) => {
+    runtime.cancel(msg.chat.id);
+    bot.sendMessage(msg.chat.id, 'Canceled current run.');
+  });
+
   bot.onText(/^\/note (.+)/s, (msg, match) => {
     const body = match?.[1] ?? '';
     const [title, ...rest] = body.split(':');
@@ -143,7 +178,7 @@ export function startTelegramBot(opts?: { debugIO?: boolean }) {
         addMessage(chatId, 'user', msg.text!);
         await bot.sendChatAction(chatId, 'typing');
         const reply = await openai.chat(chatId, msg.text!, tools);
-        logger.info(`telegram.out chatId=${chatId} chars=${reply.length}`);
+        logger.info(`telegram.out chatId=${chatId} chars=${reply.length} text=${summarizeLog(reply)}`);
         await chunkAndSend(bot, chatId, reply);
       } catch (err) {
         const text = `Error: ${(err as Error).message}`;
@@ -166,4 +201,10 @@ export function startTelegramBot(opts?: { debugIO?: boolean }) {
   logger.info('Telegram bot started.');
 
   // Heartbeat handles autonomous check-ins
+  const tickMs = cfg.agent?.tickMs ?? 1500;
+  setInterval(() => {
+    runtime
+      .tickAll()
+      .catch((err) => logger.error(`runtime.tick error: ${(err as Error).message}`));
+  }, Math.max(500, tickMs));
 }

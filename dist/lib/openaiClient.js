@@ -1,13 +1,49 @@
 import { SYSTEM_PROMPT } from './prompt.js';
-import { getMessages, addMessage, getUserProfile, listNotes } from './db.js';
+import { addMessage, getDbHandle, getUserProfile } from './db.js';
 import { logger } from './logger.js';
-import fs from 'fs-extra';
-import path from 'node:path';
 import { createChatClient, getChatModel, supportsTools } from './llm.js';
+import { choose_next_step } from '../agent/decision.js';
+import { filterToolsByTier, getToolRiskTier } from '../agent/toolPolicy.js';
+import { deriveFactsFromMessage } from '../memory/derive.js';
+import { addMemoryItem, appendLedgerEvent, recordAssistantMessage, recordUserMessage, getRecentEvents, searchMemory, sealPendingBlocks, } from '../memory/ledger.js';
+import { getWorkingState, mergeWorkingState, saveWorkingState } from '../memory/workingState.js';
+import { injectMarkdown } from './markdown/injector.js';
+import { migrateWorkspaceDocs } from './markdown/migration.js';
 function summarize(text, maxLen) {
     if (text.length <= maxLen)
         return text;
     return text.slice(0, maxLen) + '…';
+}
+function formatWorkingState(state) {
+    const lines = [];
+    if (state.objective)
+        lines.push(`Objective: ${state.objective}`);
+    if (state.constraints.length) {
+        lines.push('Constraints:');
+        for (const item of state.constraints)
+            lines.push(`- ${item}`);
+    }
+    if (state.hypotheses.length) {
+        lines.push('Hypotheses:');
+        for (const item of state.hypotheses)
+            lines.push(`- ${item}`);
+    }
+    if (state.lastObservations.length) {
+        lines.push('Last observations:');
+        for (const item of state.lastObservations)
+            lines.push(`- ${item}`);
+    }
+    if (state.nextActions.length) {
+        lines.push('Next actions:');
+        for (const item of state.nextActions)
+            lines.push(`- ${item}`);
+    }
+    return lines.join('\n');
+}
+function formatRetrievedMemories(memories) {
+    return memories
+        .map((m) => `- (${m.kind}, score=${m.score.toFixed(2)}) ${m.text} [${m.citation.blockId}:${m.citation.eventId}]`)
+        .join('\n');
 }
 async function withTimeout(promise, ms) {
     if (!Number.isFinite(ms) || ms <= 0)
@@ -32,69 +68,110 @@ export class OpenAIClient {
         this.cfg = cfg;
     }
     async chat(chatId, userText, tools) {
-        const historyLimit = Math.max(1, Math.min(this.cfg.bot?.maxHistory ?? 12, 50));
-        const rawHistory = getMessages(chatId, historyLimit * 3);
-        const history = rawHistory.filter((m) => m.role !== 'tool').slice(-historyLimit);
-        if (history.length && history[history.length - 1].role === 'user' && history[history.length - 1].content === userText) {
-            history.pop(); // avoid duplicating the current user message
-        }
+        migrateWorkspaceDocs();
+        const db = getDbHandle();
         const profile = getUserProfile(chatId);
         const assistant = this.cfg.assistant;
         const user = this.cfg.user;
-        const personality = loadPersonalityGuide();
-        const cliGuide = loadCliGuide();
-        const notes = listNotes(chatId, 3);
         const model = getChatModel(this.cfg);
         const debugIO = process.env.SPARROW_DEBUG_IO === '1';
+        const working = getWorkingState(chatId, db);
+        const userEventId = recordUserMessage(chatId, userText);
+        const derivedFacts = deriveFactsFromMessage(userText);
+        for (const fact of derivedFacts) {
+            const factEventId = appendLedgerEvent(db, {
+                chatId,
+                type: 'derived_fact',
+                payload: { text: fact.text, sourceEventId: userEventId },
+            });
+            addMemoryItem(db, { chatId, kind: fact.kind, text: fact.text, eventId: factEventId });
+        }
+        const decision = choose_next_step(working, userText);
+        const observations = [];
+        for (const action of decision.actions) {
+            if (action.tier !== 0)
+                continue;
+            const tool = tools.get(action.tool);
+            if (!tool || getToolRiskTier(tool.name, tool.permission) > decision.maxToolTier)
+                continue;
+            try {
+                const result = await tools.run(action.tool, action.args, chatId);
+                const summary = summarize(typeof result === 'string' ? result : JSON.stringify(result), 800);
+                observations.push(`${action.summary}: ${summary}`);
+            }
+            catch (err) {
+                observations.push(`${action.summary}: error ${err.message}`);
+            }
+        }
+        const constraintBase = [
+            'CLI tool is read-only; no writes, sudo, kills, or installs',
+            'Ask at most one question only if needed',
+            'Tier2 writes are not allowed; output patch/diff only',
+        ];
+        if (assistant?.name)
+            constraintBase.push(`Assistant name: ${assistant.name}`);
+        if (assistant?.description)
+            constraintBase.push(`Assistant description: ${assistant.description}`);
+        if (user?.name)
+            constraintBase.push(`User name: ${user.name}`);
+        if (user?.role)
+            constraintBase.push(`User role: ${user.role}`);
+        if (user?.preferences)
+            constraintBase.push(`User preferences: ${user.preferences}`);
+        if (user?.timezone)
+            constraintBase.push(`User timezone: ${user.timezone}`);
+        if (profile)
+            constraintBase.push(`Working style: ${profile}`);
+        const mergedConstraints = Array.from(new Set([...(working.constraints ?? []), ...constraintBase]));
+        const updatedState = mergeWorkingState(working, {
+            objective: working.objective || userText,
+            constraints: mergedConstraints,
+            lastObservations: [...(working.lastObservations ?? []), ...observations],
+            nextActions: decision.plan,
+        }, { maxObservations: 6, maxNextActions: 6 });
+        saveWorkingState(chatId, updatedState, db);
+        const retrieved = searchMemory(db, chatId, userText, 6);
+        const recentToolNames = getRecentToolNames(chatId);
+        const injection = injectMarkdown({
+            userText,
+            tools: tools.list(),
+            recentTools: recentToolNames,
+        });
         const baseMsgs = [
             { role: 'system', content: SYSTEM_PROMPT },
-            ...(personality ? [{ role: 'system', content: `Personality guide:\n${personality}` }] : []),
-            ...(cliGuide ? [{ role: 'system', content: `CLI tool guide:\n${cliGuide}` }] : []),
-            ...(assistant
+            ...(injection.text
                 ? [
                     {
                         role: 'system',
-                        content: `Assistant profile:\n${JSON.stringify({
-                            name: assistant.name,
-                            age: assistant.age,
-                            hobbies: assistant.hobbies,
-                            description: assistant.description,
-                        }, null, 2)}`,
+                        content: `Workspace docs:\n${injection.text}`,
                     },
                 ]
                 : []),
-            ...(user
+            {
+                role: 'system',
+                content: `Working state:\n${formatWorkingState(updatedState)}`,
+            },
+            ...(retrieved.length
                 ? [
                     {
                         role: 'system',
-                        content: `User profile:\n${JSON.stringify({
-                            name: user.name,
-                            role: user.role,
-                            preferences: user.preferences,
-                            timezone: user.timezone,
-                        }, null, 2)}`,
+                        content: `Retrieved memories (cite as [block_id:event_id]):\n${formatRetrievedMemories(retrieved)}`,
                     },
                 ]
                 : []),
-            ...(notes.length
-                ? [
-                    {
-                        role: 'system',
-                        content: 'User notes (most recent first):\n' +
-                            notes
-                                .map((n) => `- ${n.title}: ${n.content.replace(/\s+/g, ' ').slice(0, 200)}`)
-                                .join('\n'),
-                    },
-                ]
-                : []),
-            ...(profile ? [{ role: 'system', content: `User working style profile:\n${profile}` }] : []),
-            ...history.map((m) => ({ role: m.role, content: m.content })),
             { role: 'user', content: userText },
         ];
         const allowTools = supportsTools(this.cfg);
-        const toolDefs = allowTools ? tools.asOpenAITools() : [];
+        const allowedTools = allowTools ? filterToolsByTier(tools.list(), decision.maxToolTier) : [];
+        const allowedToolNames = new Set(allowedTools.map((t) => t.name));
+        const toolDefs = allowTools
+            ? allowedTools.map((t) => ({
+                type: 'function',
+                function: { name: t.name, description: t.description, parameters: t.schema },
+            }))
+            : [];
         const openaiMsgs = [...baseMsgs];
-        logger.info(`chat.in chatId=${chatId} model=${model} tools=${toolDefs.length} text=${summarize(userText, debugIO ? 4000 : 400)}`);
+        logger.info(`chat.in chatId=${chatId} model=${model} tools=${toolDefs.length} playbook=${decision.playbookId} text=${summarize(userText, debugIO ? 4000 : 400)}`);
         if (toolDefs.length) {
             // Let the model know explicitly which tools exist and when to use them.
             openaiMsgs.push({
@@ -110,6 +187,8 @@ CLI tool notes:
 - Redirects are only allowed to /dev/null (e.g., 2>/dev/null).
 - Prefer separate commands (e.g., "cd ~/projects", "ls -1", "git -C ~/projects/sparrow status").
 - You can use action=start to create a session and reuse sessionId across calls to preserve cwd.
+- For tools that support confirm=true on write actions (calendar/drive/n8n/filesystem/task_runner), set confirm=true when the user explicitly asks you to perform the write.
+- Never search for or reveal secrets (API keys/tokens/passwords/private keys) or their locations.
 `,
             });
         }
@@ -159,6 +238,13 @@ CLI tool notes:
                 for (const call of msg.tool_calls) {
                     if (call.type !== 'function')
                         continue;
+                    const toolName = call.function?.name ?? '';
+                    if (toolName && !allowedToolNames.has(toolName)) {
+                        const blocked = `Tool ${toolName} not allowed under current risk tier.`;
+                        accumulated.push({ role: 'tool', tool_call_id: call.id, content: blocked });
+                        addMessage(chatId, 'tool', blocked);
+                        continue;
+                    }
                     const signature = `${call.function.name}:${call.function.arguments}`;
                     if (seenToolCalls.has(signature)) {
                         const dedupe = `Skipping repeated tool call ${call.function.name}; please provide different arguments or stop.`;
@@ -190,32 +276,35 @@ CLI tool notes:
                 return fallback;
             }
             addMessage(chatId, 'assistant', content);
+            recordAssistantMessage(chatId, content);
+            const episodicSummary = summarize(`User: ${userText}\nAssistant: ${content}\nObservations: ${observations.join(' | ')}`, 900);
+            const summaryEventId = appendLedgerEvent(db, {
+                chatId,
+                type: 'observation',
+                payload: { text: episodicSummary, sourceEventId: userEventId },
+            });
+            addMemoryItem(db, { chatId, kind: 'summary', text: episodicSummary, eventId: summaryEventId });
+            sealPendingBlocks(db, { force: true });
             logger.info(`chat.out chatId=${chatId} chars=${content.length} text=${summarize(content, debugIO ? 4000 : 400)}`);
             return content;
         }
     }
 }
-function loadPersonalityGuide() {
-    try {
-        const file = path.resolve(process.cwd(), 'personality.md');
-        if (!fs.existsSync(file))
-            return '';
-        return fs.readFileSync(file, 'utf8').trim();
+function getRecentToolNames(chatId, limit = 12) {
+    const events = getRecentEvents(getDbHandle(), chatId, limit);
+    const names = [];
+    for (const ev of events) {
+        if (ev.type !== 'tool_call')
+            continue;
+        try {
+            const payload = JSON.parse(ev.payload);
+            const name = payload?.tool;
+            if (typeof name === 'string')
+                names.push(name);
+        }
+        catch {
+            // ignore
+        }
     }
-    catch (err) {
-        logger.warn(`Failed to read personality.md: ${err.message}`);
-        return '';
-    }
-}
-function loadCliGuide() {
-    try {
-        const file = path.resolve(process.cwd(), 'CLI.md');
-        if (!fs.existsSync(file))
-            return '';
-        return fs.readFileSync(file, 'utf8').trim();
-    }
-    catch (err) {
-        logger.warn(`Failed to read CLI.md: ${err.message}`);
-        return '';
-    }
+    return names;
 }

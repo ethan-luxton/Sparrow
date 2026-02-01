@@ -41,6 +41,11 @@ const defaultConfig = {
     tasks: {
         allowlist: [],
     },
+    agent: {
+        tickMs: 1500,
+        tickMaxToolCalls: 1,
+        tickMaxTokens: 320,
+    },
 };
 function ensureDirs() {
     fs.ensureDirSync(baseDir);
@@ -88,6 +93,7 @@ export function loadConfig() {
         paths: { ...defaultConfig.paths, ...(existing.paths ?? {}) },
         bot: { ...defaultConfig.bot, ...(existing.bot ?? {}) },
         tasks: { ...defaultConfig.tasks, ...(existing.tasks ?? {}) },
+        agent: { ...defaultConfig.agent, ...(existing.agent ?? {}) },
     };
 }
 export function saveConfig(cfg) {

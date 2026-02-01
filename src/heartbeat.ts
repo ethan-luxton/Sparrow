@@ -8,10 +8,7 @@ import { logger } from './lib/logger.js';
 import { createChatClient, getChatModel } from './lib/llm.js';
 import type { ChatQueue } from './lib/queues.js';
 
-const HEARTBEAT_PATHS = [
-  path.resolve(process.cwd(), 'src', 'guides', 'HEARTBEAT.md'),
-  path.resolve(process.cwd(), 'src', 'guides', 'heartbeat.md'),
-];
+const HEARTBEAT_PATHS = [path.resolve(process.cwd(), 'src', 'agent', 'mds', 'HEARTBEAT.md')];
 const DEFAULT_HEARTBEAT_PROMPT =
   'Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. ' +
   'Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK.';

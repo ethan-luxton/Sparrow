@@ -7,7 +7,7 @@ import { baseDir } from '../config/paths.js';
 export function calendarTool() {
     return {
         name: 'google_calendar',
-        description: 'List calendars/events, create/update/delete events, or quick_add. start/end/timeMin/timeMax should be RFC3339; for all-day use YYYY-MM-DD. Attachments use Drive fileId.',
+        description: 'List calendars/events, create/update/delete events, or quick_add. start/end/timeMin/timeMax should be RFC3339; for all-day use YYYY-MM-DD. Attachments use Drive fileId. create/update/delete/quick_add require confirm=true. Use recurrence as RRULE strings (e.g., "RRULE:FREQ=WEEKLY;BYDAY=TU,TH,SA;COUNT=36").',
         permission: 'write',
         schema: {
             type: 'object',
@@ -27,6 +27,7 @@ export function calendarTool() {
                 end: { type: 'string' },
                 timezone: { type: 'string' },
                 timeZone: { type: 'string' },
+                recurrence: { anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }] },
                 text: { type: 'string' },
                 attachments: {
                     type: 'array',
@@ -179,6 +180,11 @@ export function calendarTool() {
                     if (!start || !end) {
                         return 'start/end must be RFC3339 date-time or YYYY-MM-DD (all-day).';
                     }
+                    const recurrence = typeof args.recurrence === 'string'
+                        ? [args.recurrence]
+                        : Array.isArray(args.recurrence) && args.recurrence.length
+                            ? args.recurrence
+                            : undefined;
                     const attachments = await resolveAttachments();
                     const res = await calendar.events.insert({
                         calendarId: calId,
@@ -188,6 +194,7 @@ export function calendarTool() {
                             description: args.description,
                             start,
                             end,
+                            ...(recurrence ? { recurrence } : {}),
                             attachments,
                         },
                     });
@@ -213,6 +220,14 @@ export function calendarTool() {
                         requestBody.summary = args.summary;
                     if (args.description)
                         requestBody.description = args.description;
+                    if (args.recurrence) {
+                        requestBody.recurrence =
+                            typeof args.recurrence === 'string'
+                                ? [args.recurrence]
+                                : Array.isArray(args.recurrence) && args.recurrence.length
+                                    ? args.recurrence
+                                    : undefined;
+                    }
                     if (args.start) {
                         const start = buildEventTime(args.start);
                         if (!start)

@@ -73,6 +73,11 @@ export interface SparrowConfig {
       cwd?: string;
     }>;
   };
+  agent?: {
+    tickMs?: number;
+    tickMaxToolCalls?: number;
+    tickMaxTokens?: number;
+  };
 }
 
 const defaultConfig: SparrowConfig = {
@@ -114,6 +119,11 @@ const defaultConfig: SparrowConfig = {
   },
   tasks: {
     allowlist: [],
+  },
+  agent: {
+    tickMs: 1500,
+    tickMaxToolCalls: 1,
+    tickMaxTokens: 320,
   },
 };
 
@@ -163,6 +173,7 @@ export function loadConfig(): SparrowConfig {
     paths: { ...defaultConfig.paths, ...(existing.paths ?? {}) },
     bot: { ...defaultConfig.bot, ...(existing.bot ?? {}) },
     tasks: { ...defaultConfig.tasks, ...(existing.tasks ?? {}) },
+    agent: { ...defaultConfig.agent, ...(existing.agent ?? {}) },
   };
 }
 
