@@ -63,6 +63,68 @@ function ensureDb() {
       content TEXT,
       updatedAt TEXT DEFAULT CURRENT_TIMESTAMP
     );`);
+    db.exec(`CREATE TABLE IF NOT EXISTS ledger_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chatId INTEGER,
+      type TEXT,
+      payload TEXT,
+      eventHash TEXT,
+      blockId INTEGER,
+      blockIndex INTEGER,
+      createdAt TEXT DEFAULT CURRENT_TIMESTAMP
+    );`);
+    db.exec(`CREATE TABLE IF NOT EXISTS ledger_blocks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      prevHash TEXT,
+      merkleRoot TEXT,
+      blockHash TEXT,
+      eventCount INTEGER,
+      createdAt TEXT DEFAULT CURRENT_TIMESTAMP
+    );`);
+    db.exec(`CREATE TABLE IF NOT EXISTS memory_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chatId INTEGER,
+      kind TEXT,
+      text TEXT,
+      embedding TEXT,
+      eventId INTEGER,
+      createdAt TEXT DEFAULT CURRENT_TIMESTAMP
+    );`);
+    db.exec(`CREATE TABLE IF NOT EXISTS working_state (
+      chatId INTEGER PRIMARY KEY,
+      state TEXT,
+      updatedAt TEXT DEFAULT CURRENT_TIMESTAMP
+    );`);
+    db.exec(`CREATE TABLE IF NOT EXISTS agent_objectives (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chatId INTEGER,
+      text TEXT,
+      status TEXT,
+      createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+      updatedAt TEXT DEFAULT CURRENT_TIMESTAMP
+    );`);
+    db.exec(`CREATE TABLE IF NOT EXISTS agent_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chatId INTEGER,
+      objectiveId INTEGER,
+      type TEXT,
+      payload TEXT,
+      status TEXT,
+      lastError TEXT,
+      createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+      updatedAt TEXT DEFAULT CURRENT_TIMESTAMP
+    );`);
+    db.exec(`CREATE TABLE IF NOT EXISTS agent_state (
+      chatId INTEGER PRIMARY KEY,
+      paused INTEGER DEFAULT 0,
+      canceled INTEGER DEFAULT 0,
+      lastNotifiedAt TEXT,
+      updatedAt TEXT DEFAULT CURRENT_TIMESTAMP
+    );`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_agent_objectives_chat ON agent_objectives(chatId, status);');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_agent_tasks_chat ON agent_tasks(chatId, status);');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_ledger_events_block ON ledger_events(blockId, blockIndex);');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_memory_items_chat ON memory_items(chatId);');
   }
   return db;
 }

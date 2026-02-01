@@ -32,19 +32,26 @@ function assertWithinBase(target: string, base: string) {
 export function filesystemTool(): ToolDefinition {
   return {
     name: 'filesystem',
-    description: 'Safe local file access restricted to ~/.sparrow only.',
+    description: 'Safe local file access restricted to ~/.sparrow only. read/list/read_pdf_text/read_docx_text are read-only; write/write_pdf/write_binary require confirm=true.',
     permission: 'write',
     schema: {
       type: 'object',
       properties: {
-        action: { type: 'string', enum: ['read', 'write', 'list', 'read_pdf_text', 'read_docx_text', 'write_pdf'] },
+        action: { type: 'string', enum: ['read', 'write', 'list', 'read_pdf_text', 'read_docx_text', 'write_pdf', 'write_binary'] },
         path: { type: 'string' },
         content: { type: 'string' },
+        encoding: { type: 'string', enum: ['base64'] },
+        confirm: { type: 'boolean' },
       },
       required: ['action', 'path'],
       additionalProperties: false,
     },
-    handler: async (args: { action: 'read' | 'write' | 'list' | 'read_pdf_text' | 'read_docx_text' | 'write_pdf'; path: string; content?: string }) => {
+    handler: async (args: {
+      action: 'read' | 'write' | 'list' | 'read_pdf_text' | 'read_docx_text' | 'write_pdf' | 'write_binary';
+      path: string;
+      content?: string;
+      encoding?: 'base64';
+    }) => {
       loadConfig(); // ensures baseDir exists
       const target = assertWithinBase(args.path, baseDir);
       switch (args.action) {
@@ -54,6 +61,13 @@ export function filesystemTool(): ToolDefinition {
           if (typeof args.content !== 'string') throw new Error('content is required for write');
           await fs.outputFile(target, args.content, 'utf8');
           return 'written';
+        case 'write_binary': {
+          if (typeof args.content !== 'string') throw new Error('content is required for write_binary');
+          if (args.encoding !== 'base64') throw new Error('encoding=base64 is required for write_binary');
+          const buffer = Buffer.from(args.content, 'base64');
+          await fs.outputFile(target, buffer);
+          return 'written';
+        }
         case 'write_pdf': {
           if (typeof args.content !== 'string') throw new Error('content is required for write_pdf');
           const buffer = await createPdfBufferFromText(args.content);
