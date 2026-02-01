@@ -9,6 +9,17 @@ import { n8nTool } from './n8n.js';
 import { weatherTool } from './weather.js';
 import type { SparrowConfig } from '../config/config.js';
 import { cliTool } from './cli.js';
+import { codeSearchTool } from './codeSearch.js';
+import { fileSnippetTool } from './fileSnippet.js';
+import { fileDiffTool } from './fileDiff.js';
+import { processTool } from './process.js';
+import { diskTool } from './disk.js';
+import { serviceTool } from './service.js';
+import { dependencyMapTool } from './dependencyMap.js';
+import { projectSummaryTool } from './projectSummary.js';
+import { docIndexTool } from './docIndex.js';
+import { taskRunnerTool } from './taskRunner.js';
+import { snapshotTool } from './snapshot.js';
 
 export function buildToolRegistry(cfg?: SparrowConfig) {
   const registry = new ToolRegistry();
@@ -18,6 +29,17 @@ export function buildToolRegistry(cfg?: SparrowConfig) {
   registry.register(gmailTool());
   registry.register(notesTool());
   registry.register(cliTool());
+  registry.register(codeSearchTool());
+  registry.register(fileSnippetTool());
+  registry.register(fileDiffTool());
+  registry.register(processTool());
+  registry.register(diskTool());
+  registry.register(serviceTool());
+  registry.register(dependencyMapTool());
+  registry.register(projectSummaryTool());
+  registry.register(docIndexTool());
+  registry.register(taskRunnerTool());
+  registry.register(snapshotTool());
   registry.register(calendarTool());
   registry.register(n8nTool());
   registry.register(weatherTool());

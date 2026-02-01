@@ -11,7 +11,6 @@ const defaultConfig = {
     user: {},
     openai: {
         model: 'gpt-5-mini',
-        searchModel: 'gpt-5-mini',
     },
     google: {
         scopes: [
@@ -37,6 +36,10 @@ const defaultConfig = {
         checkinMessage: 'How are things going? Share any updates or tasks I should remember.',
         heartbeatIntervalHours: 3,
         heartbeatMaxTokens: 180,
+        heartbeatAckMaxChars: 300,
+    },
+    tasks: {
+        allowlist: [],
     },
 };
 function ensureDirs() {
@@ -61,7 +64,6 @@ export function loadConfig() {
     };
     if (existing.openai) {
         existing.openai.model = normalizeModel(existing.openai.model);
-        existing.openai.searchModel = normalizeModel(existing.openai.searchModel);
     }
     if (process.env.OPENAI_BASE_URL) {
         existing.openai = { ...(existing.openai ?? {}), baseUrl: process.env.OPENAI_BASE_URL };
@@ -85,6 +87,7 @@ export function loadConfig() {
         google: { ...defaultConfig.google, ...(existing.google ?? {}) },
         paths: { ...defaultConfig.paths, ...(existing.paths ?? {}) },
         bot: { ...defaultConfig.bot, ...(existing.bot ?? {}) },
+        tasks: { ...defaultConfig.tasks, ...(existing.tasks ?? {}) },
     };
 }
 export function saveConfig(cfg) {
@@ -134,10 +137,6 @@ export function getSecret(cfg, field) {
     const env = envFallback(field);
     if (env)
         return env;
-    // allow .env OPENAI_SEARCH_MODEL override for search model
-    if (field === 'openai.apiKey' && process.env.OPENAI_SEARCH_MODEL && !cfg.openai?.searchModel) {
-        cfg.openai = { ...(cfg.openai ?? {}), searchModel: process.env.OPENAI_SEARCH_MODEL };
-    }
     const secret = requireSecret();
     const ctx = resolveCtx(cfg);
     const [group, key] = field.split('.');

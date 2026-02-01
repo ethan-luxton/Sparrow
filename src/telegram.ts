@@ -77,7 +77,7 @@ export function startTelegramBot(opts?: { debugIO?: boolean }) {
   const bot = new TelegramBot(botToken, options);
   const openai = new OpenAIClient(cfg);
   const tools = buildToolRegistry(cfg);
-  startHeartbeat(bot, cfg);
+  startHeartbeat(bot, cfg, { queue });
   if (opts?.debugIO) {
     process.env.SPARROW_DEBUG_IO = '1';
   }

@@ -42,12 +42,14 @@ export class OpenAIClient {
         const assistant = this.cfg.assistant;
         const user = this.cfg.user;
         const personality = loadPersonalityGuide();
+        const cliGuide = loadCliGuide();
         const notes = listNotes(chatId, 3);
         const model = getChatModel(this.cfg);
         const debugIO = process.env.SPARROW_DEBUG_IO === '1';
         const baseMsgs = [
             { role: 'system', content: SYSTEM_PROMPT },
             ...(personality ? [{ role: 'system', content: `Personality guide:\n${personality}` }] : []),
+            ...(cliGuide ? [{ role: 'system', content: `CLI tool guide:\n${cliGuide}` }] : []),
             ...(assistant
                 ? [
                     {
@@ -100,12 +102,20 @@ export class OpenAIClient {
                 content: `Available tools: ${toolDefs
                     .map((t) => t.function?.name ?? '')
                     .filter(Boolean)
-                    .join(', ')}. Use them when they help. If a tool has an action field, choose the most appropriate action yourself; only ask the user if required inputs are missing. Minimize tool calls and avoid redundant steps.`,
+                    .join(', ')}. Use them when they help. If a tool has an action field, choose the most appropriate action yourself; only ask the user if required inputs are missing. Minimize tool calls and avoid redundant steps.
+
+CLI tool notes:
+- Use action=run with a commands array for multi-step tasks.
+- Allowed operators: pipe (|), &&, and one fallback (cmd1 || cmd2). Avoid ;, >, < (except /dev/null).
+- Redirects are only allowed to /dev/null (e.g., 2>/dev/null).
+- Prefer separate commands (e.g., "cd ~/projects", "ls -1", "git -C ~/projects/sparrow status").
+- You can use action=start to create a session and reuse sessionId across calls to preserve cwd.
+`,
             });
         }
         const accumulated = [...openaiMsgs];
         let toolIterations = 0;
-        const maxToolIterations = 5;
+        const maxToolIterations = 12;
         const seenToolCalls = new Set();
         while (true) {
             const request = {
@@ -194,6 +204,18 @@ function loadPersonalityGuide() {
     }
     catch (err) {
         logger.warn(`Failed to read personality.md: ${err.message}`);
+        return '';
+    }
+}
+function loadCliGuide() {
+    try {
+        const file = path.resolve(process.cwd(), 'CLI.md');
+        if (!fs.existsSync(file))
+            return '';
+        return fs.readFileSync(file, 'utf8').trim();
+    }
+    catch (err) {
+        logger.warn(`Failed to read CLI.md: ${err.message}`);
         return '';
     }
 }

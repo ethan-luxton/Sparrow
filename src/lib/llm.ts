@@ -5,10 +5,6 @@ export function getChatModel(cfg: SparrowConfig): string {
   return cfg.openai?.model ?? process.env.OPENAI_MODEL ?? 'gpt-5-mini';
 }
 
-export function getSearchModel(cfg: SparrowConfig): string {
-  return cfg.openai?.searchModel ?? process.env.OPENAI_SEARCH_MODEL ?? 'gpt-5-mini';
-}
-
 export function supportsTools(cfg: SparrowConfig): boolean {
   return true;
 }

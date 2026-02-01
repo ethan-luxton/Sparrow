@@ -31,7 +31,6 @@ export interface SparrowConfig {
   openai?: {
     apiKeyEnc?: string;
     model?: string;
-    searchModel?: string;
     baseUrl?: string;
   };
   telegram?: {
@@ -62,6 +61,17 @@ export interface SparrowConfig {
     checkinMessage?: string;
     heartbeatIntervalHours?: number;
     heartbeatMaxTokens?: number;
+    heartbeatPrompt?: string;
+    heartbeatAckMaxChars?: number;
+    heartbeatActiveHours?: { start: string; end: string };
+  };
+  tasks?: {
+    allowlist?: Array<{
+      id: string;
+      command: string;
+      args?: string[];
+      cwd?: string;
+    }>;
   };
 }
 
@@ -75,7 +85,6 @@ const defaultConfig: SparrowConfig = {
   user: {},
   openai: {
     model: 'gpt-5-mini',
-    searchModel: 'gpt-5-mini',
   },
   google: {
     scopes: [
@@ -101,6 +110,10 @@ const defaultConfig: SparrowConfig = {
     checkinMessage: 'How are things going? Share any updates or tasks I should remember.',
     heartbeatIntervalHours: 3,
     heartbeatMaxTokens: 180,
+    heartbeatAckMaxChars: 300,
+  },
+  tasks: {
+    allowlist: [],
   },
 };
 
@@ -126,7 +139,6 @@ export function loadConfig(): SparrowConfig {
   };
   if (existing.openai) {
     existing.openai.model = normalizeModel(existing.openai.model);
-    existing.openai.searchModel = normalizeModel(existing.openai.searchModel);
   }
   if (process.env.OPENAI_BASE_URL) {
     existing.openai = { ...(existing.openai ?? {}), baseUrl: process.env.OPENAI_BASE_URL };
@@ -150,6 +162,7 @@ export function loadConfig(): SparrowConfig {
     google: { ...defaultConfig.google, ...(existing.google ?? {}) },
     paths: { ...defaultConfig.paths, ...(existing.paths ?? {}) },
     bot: { ...defaultConfig.bot, ...(existing.bot ?? {}) },
+    tasks: { ...defaultConfig.tasks, ...(existing.tasks ?? {}) },
   };
 }
 
@@ -203,10 +216,6 @@ export function setSecret(cfg: SparrowConfig, field: SecretField, value: string)
 export function getSecret(cfg: SparrowConfig, field: SecretField): string {
   const env = envFallback(field);
   if (env) return env;
-  // allow .env OPENAI_SEARCH_MODEL override for search model
-  if (field === 'openai.apiKey' && process.env.OPENAI_SEARCH_MODEL && !cfg.openai?.searchModel) {
-    cfg.openai = { ...(cfg.openai ?? {}), searchModel: process.env.OPENAI_SEARCH_MODEL };
-  }
   const secret = requireSecret();
   const ctx = resolveCtx(cfg);
   const [group, key] = field.split('.') as [keyof SparrowConfig, string];
