@@ -111,6 +111,28 @@ const ALLOW_ACTIONS: Record<string, Set<string>> = {
   n8n: new Set(['list_workflows', 'get_workflow', 'list_executions', 'workflow_schema']),
   filesystem: new Set(['read', 'list', 'read_pdf_text', 'read_docx_text']),
   notes: new Set(['add', 'list']),
+  workspace: new Set([
+    'ensure_workspace',
+    'list_projects',
+    'ensure_project',
+    'read_file',
+    'write_file',
+    'apply_patch',
+    'list_files',
+    'search',
+  ]),
+  git: new Set([
+    'status',
+    'log',
+    'diff',
+    'show',
+    'branch_list',
+    'branch_create',
+    'fetch',
+    'add',
+    'init',
+    'config_list',
+  ]),
 };
 
 const CONFIRM_ACTIONS: Record<string, Set<string>> = {
@@ -119,6 +141,19 @@ const CONFIRM_ACTIONS: Record<string, Set<string>> = {
   n8n: new Set(['create_workflow']),
   filesystem: new Set(['write', 'write_pdf']),
   task_runner: new Set(['run']),
+  git: new Set([
+    'checkout',
+    'switch',
+    'pull',
+    'push',
+    'commit',
+    'stash',
+    'restore',
+    'reset',
+    'merge',
+    'rebase',
+    'tag',
+  ]),
 };
 
 function enforceToolPolicy(tool: ToolDefinition, args: unknown) {
@@ -167,7 +202,7 @@ function enforceSensitiveAccess(toolName: string, args: unknown) {
     }
   }
 
-  if (toolName === 'file_snippet' || toolName === 'file_diff' || toolName === 'filesystem') {
+  if (toolName === 'file_snippet' || toolName === 'file_diff' || toolName === 'filesystem' || toolName === 'workspace') {
     const pathArg = (args as any)?.path ?? (args as any)?.pathA ?? '';
     if (pathArg && isSensitivePath(String(pathArg))) {
       maybeBlock('Reading sensitive files (e.g., .env, private keys) is blocked.');
@@ -185,6 +220,13 @@ function enforceSensitiveAccess(toolName: string, args: unknown) {
     const query = String((args as any)?.query ?? '');
     if (isSensitiveQuery(query)) {
       maybeBlock('Gmail searches for secrets are blocked.');
+    }
+  }
+
+  if (toolName === 'workspace' && action === 'search') {
+    const query = String((args as any)?.query ?? '');
+    if (isSensitiveQuery(query)) {
+      maybeBlock('Workspace searches for secrets are blocked.');
     }
   }
 }

@@ -119,7 +119,7 @@ async function runHeartbeatForChat(chatId, bot, client, cfg, guide, intervalMs, 
                 { role: 'system', content: `Recent messages:\n${recent || '(none)'}` },
             ],
             temperature: 0.2,
-            max_tokens: maxTokens,
+            max_completion_tokens: maxTokens,
         });
         let content = (completion.choices[0]?.message?.content ?? '').trim();
         if (!content) {

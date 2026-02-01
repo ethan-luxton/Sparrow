@@ -31,6 +31,7 @@ export interface SparrowConfig {
   openai?: {
     apiKeyEnc?: string;
     model?: string;
+    codeModel?: string;
     baseUrl?: string;
   };
   telegram?: {
@@ -90,6 +91,7 @@ const defaultConfig: SparrowConfig = {
   user: {},
   openai: {
     model: 'gpt-5-mini',
+    codeModel: 'gpt-5.1-codex-mini',
   },
   google: {
     scopes: [
@@ -149,6 +151,7 @@ export function loadConfig(): SparrowConfig {
   };
   if (existing.openai) {
     existing.openai.model = normalizeModel(existing.openai.model);
+    existing.openai.codeModel = existing.openai.codeModel ?? defaultConfig.openai?.codeModel;
   }
   if (process.env.OPENAI_BASE_URL) {
     existing.openai = { ...(existing.openai ?? {}), baseUrl: process.env.OPENAI_BASE_URL };

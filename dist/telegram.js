@@ -10,7 +10,12 @@ import { logger } from './lib/logger.js';
 import { startHeartbeat } from './heartbeat.js';
 import { AgentRuntime } from './agent/runtime.js';
 import { AgentLLM } from './agent/llm.js';
+import fs from 'fs-extra';
+import path from 'node:path';
+import { baseDir } from './config/paths.js';
+import { redactSensitiveText } from './lib/redaction.js';
 const queue = new ChatQueue();
+const pendingMedia = new Map();
 function boolFromEnv(value) {
     if (!value)
         return undefined;
@@ -66,6 +71,39 @@ function summarizeLog(text, maxLen = 200) {
     if (text.length <= maxLen)
         return text;
     return text.slice(0, maxLen) + '…';
+}
+function isYes(text) {
+    const t = text.trim().toLowerCase();
+    return ['yes', 'y', 'sure', 'ok', 'okay', 'yep', 'please', 'do it'].includes(t);
+}
+function isNo(text) {
+    const t = text.trim().toLowerCase();
+    return ['no', 'n', 'nope', 'nah', 'dont', "don't"].includes(t);
+}
+async function downloadTelegramFile(bot, fileId, targetPath) {
+    const link = await bot.getFileLink(fileId);
+    await fs.ensureDir(path.dirname(targetPath));
+    const res = await fetch(link);
+    if (!res.ok)
+        throw new Error(`Failed to download file: ${res.status}`);
+    const buffer = Buffer.from(await res.arrayBuffer());
+    await fs.writeFile(targetPath, buffer);
+    return targetPath;
+}
+async function handleAudioMessage(bot, tools, openai, chatId, fileId, fileName) {
+    const tmpDir = path.join(baseDir, 'tmp');
+    const audioPath = path.join(tmpDir, fileName);
+    await downloadTelegramFile(bot, fileId, audioPath);
+    const transcription = (await tools.run('whisper_transcribe', { action: 'transcribe', path: audioPath }, chatId));
+    const transcriptText = typeof transcription === 'string' ? transcription : transcription?.text ?? '';
+    if (!transcriptText.trim()) {
+        await bot.sendMessage(chatId, 'I could not transcribe that audio.');
+        return;
+    }
+    pendingMedia.set(chatId, { audioPath, transcript: transcriptText });
+    const reply = await openai.chat(chatId, transcriptText, tools);
+    await chunkAndSend(bot, chatId, reply);
+    await bot.sendMessage(chatId, 'Do you want me to save the audio and transcript to your workspace? Reply yes or no.');
 }
 export function startTelegramBot(opts) {
     const cfg = loadConfig();
@@ -147,17 +185,60 @@ export function startTelegramBot(opts) {
         bot.sendMessage(msg.chat.id, text);
     });
     bot.on('message', (msg) => {
-        if (!msg.text || msg.text.startsWith('/'))
+        if (msg.text && msg.text.startsWith('/'))
             return; // commands handled separately
         const chatId = msg.chat.id;
         queue.enqueue(chatId, async () => {
             try {
-                logger.info(`telegram.in chatId=${chatId} text=${msg.text}`);
-                addMessage(chatId, 'user', msg.text);
-                await bot.sendChatAction(chatId, 'typing');
-                const reply = await openai.chat(chatId, msg.text, tools);
-                logger.info(`telegram.out chatId=${chatId} chars=${reply.length} text=${summarizeLog(reply)}`);
-                await chunkAndSend(bot, chatId, reply);
+                if (msg.voice || msg.audio || (msg.document && msg.document.mime_type?.startsWith('audio/'))) {
+                    const fileId = msg.voice?.file_id ?? msg.audio?.file_id ?? msg.document?.file_id;
+                    const fileName = msg.document?.file_name ??
+                        (msg.voice
+                            ? `voice_${msg.voice.file_unique_id}.ogg`
+                            : `audio_${msg.audio?.file_unique_id ?? Date.now()}.bin`);
+                    if (!fileId)
+                        throw new Error('Audio file id not found.');
+                    logger.info(`telegram.in chatId=${chatId} audio=${fileName}`);
+                    await bot.sendChatAction(chatId, 'typing');
+                    await handleAudioMessage(bot, tools, openai, chatId, fileId, fileName);
+                    return;
+                }
+                if (msg.text) {
+                    const pending = pendingMedia.get(chatId);
+                    if (pending && (isYes(msg.text) || isNo(msg.text))) {
+                        if (isYes(msg.text)) {
+                            const transcriptPath = path.join('transcripts', `${path.parse(pending.audioPath).name}.txt`);
+                            const audioSavePath = path.join('audio', path.basename(pending.audioPath));
+                            const audioBuf = await fs.readFile(pending.audioPath);
+                            await tools.run('filesystem', {
+                                action: 'write',
+                                path: transcriptPath,
+                                content: pending.transcript,
+                                confirm: true,
+                            }, chatId);
+                            await tools.run('filesystem', {
+                                action: 'write_binary',
+                                path: audioSavePath,
+                                content: audioBuf.toString('base64'),
+                                encoding: 'base64',
+                                confirm: true,
+                            }, chatId);
+                            await bot.sendMessage(chatId, 'Saved the transcript and audio under ~/.sparrow.');
+                        }
+                        else {
+                            await bot.sendMessage(chatId, 'Got it, I will not save them.');
+                        }
+                        pendingMedia.delete(chatId);
+                        return;
+                    }
+                    logger.info(`telegram.in chatId=${chatId} text=${summarizeLog(redactSensitiveText(msg.text))}`);
+                    addMessage(chatId, 'user', msg.text);
+                    await bot.sendChatAction(chatId, 'typing');
+                    const reply = await openai.chat(chatId, msg.text, tools);
+                    logger.info(`telegram.out chatId=${chatId} chars=${reply.length} text=${summarizeLog(reply)}`);
+                    await chunkAndSend(bot, chatId, reply);
+                    return;
+                }
             }
             catch (err) {
                 const text = `Error: ${err.message}`;

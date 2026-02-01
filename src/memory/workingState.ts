@@ -8,6 +8,16 @@ export interface WorkingState {
   hypotheses: string[];
   lastObservations: string[];
   nextActions: string[];
+  currentProject: string;
+  currentBranch: string;
+  lastDiffSummary: string;
+  lastApprovalAt: string;
+  pendingApproval: {
+    tool: string;
+    args: Record<string, unknown>;
+    summary: string;
+    actions?: Array<{ tool: string; args: Record<string, unknown> }>;
+  } | null;
 }
 
 export function defaultWorkingState(): WorkingState {
@@ -17,6 +27,11 @@ export function defaultWorkingState(): WorkingState {
     hypotheses: [],
     lastObservations: [],
     nextActions: [],
+    currentProject: '',
+    currentBranch: '',
+    lastDiffSummary: '',
+    lastApprovalAt: '',
+    pendingApproval: null,
   };
 }
 
@@ -28,6 +43,11 @@ function normalizeState(input: Partial<WorkingState>): WorkingState {
     hypotheses: Array.isArray(input.hypotheses) ? input.hypotheses : base.hypotheses,
     lastObservations: Array.isArray(input.lastObservations) ? input.lastObservations : base.lastObservations,
     nextActions: Array.isArray(input.nextActions) ? input.nextActions : base.nextActions,
+    currentProject: typeof input.currentProject === 'string' ? input.currentProject : base.currentProject,
+    currentBranch: typeof input.currentBranch === 'string' ? input.currentBranch : base.currentBranch,
+    lastDiffSummary: typeof input.lastDiffSummary === 'string' ? input.lastDiffSummary : base.lastDiffSummary,
+    lastApprovalAt: typeof input.lastApprovalAt === 'string' ? input.lastApprovalAt : base.lastApprovalAt,
+    pendingApproval: input.pendingApproval ?? base.pendingApproval,
   };
 }
 
@@ -64,6 +84,11 @@ export function mergeWorkingState(
     hypotheses: patch.hypotheses ?? current.hypotheses,
     lastObservations: patch.lastObservations ?? current.lastObservations,
     nextActions: patch.nextActions ?? current.nextActions,
+    currentProject: patch.currentProject ?? current.currentProject,
+    currentBranch: patch.currentBranch ?? current.currentBranch,
+    lastDiffSummary: patch.lastDiffSummary ?? current.lastDiffSummary,
+    lastApprovalAt: patch.lastApprovalAt ?? current.lastApprovalAt,
+    pendingApproval: patch.pendingApproval ?? current.pendingApproval,
   };
   merged.lastObservations = merged.lastObservations.slice(-maxObservations);
   merged.nextActions = merged.nextActions.slice(-maxNextActions);

@@ -7,12 +7,13 @@ import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/reso
 import { createChatClient, getChatModel, supportsTools } from './llm.js';
 import type OpenAI from 'openai';
 import { choose_next_step } from '../agent/decision.js';
-import { filterToolsByTier, getToolRiskTier } from '../agent/toolPolicy.js';
+import { filterToolsByTier, getActionTier, getToolRiskTier } from '../agent/toolPolicy.js';
 import { deriveFactsFromMessage } from '../memory/derive.js';
 import {
   addMemoryItem,
   appendLedgerEvent,
   recordAssistantMessage,
+  recordDecision,
   recordUserMessage,
   getRecentEvents,
   searchMemory,
@@ -23,6 +24,7 @@ import { getWorkingState, mergeWorkingState, saveWorkingState } from '../memory/
 import type { WorkingState } from '../memory/workingState.js';
 import { injectMarkdown } from './markdown/injector.js';
 import { migrateWorkspaceDocs } from './markdown/migration.js';
+import { defaultProjectName, inferProjectName } from './workspace.js';
 
 function summarize(text: string, maxLen: number) {
   if (text.length <= maxLen) return text;
@@ -32,6 +34,10 @@ function summarize(text: string, maxLen: number) {
 function formatWorkingState(state: WorkingState) {
   const lines: string[] = [];
   if (state.objective) lines.push(`Objective: ${state.objective}`);
+  if (state.currentProject) lines.push(`Current project: ${state.currentProject}`);
+  if (state.currentBranch) lines.push(`Current branch: ${state.currentBranch}`);
+  if (state.lastDiffSummary) lines.push(`Last diff summary: ${state.lastDiffSummary}`);
+  if (state.lastApprovalAt) lines.push(`Last approval: ${state.lastApprovalAt}`);
   if (state.constraints.length) {
     lines.push('Constraints:');
     for (const item of state.constraints) lines.push(`- ${item}`);
@@ -73,6 +79,40 @@ async function withTimeout<T>(promise: Promise<T>, ms: number) {
   }
 }
 
+function extractBranchFromStatus(output: string): string {
+  const line = output.split('\n').find((l) => l.startsWith('## '));
+  if (!line) return '';
+  return line.replace('## ', '').trim();
+}
+
+function isSimpleApproval(text: string) {
+  const t = text.trim().toLowerCase();
+  return ['yes', 'y', 'approve', 'approved', 'ok', 'okay', 'do it', 'go ahead'].includes(t);
+}
+
+function isSimpleDenial(text: string) {
+  const t = text.trim().toLowerCase();
+  return ['no', 'n', 'deny', 'stop', 'cancel'].includes(t);
+}
+
+function normalizeQuotes(text: string) {
+  return text.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
+}
+
+function parseGitSequence(text: string): { commitMessage?: string; branch?: string; remote?: string } | null {
+  const normalized = normalizeQuotes(text).toLowerCase();
+  if (!normalized.includes('git add') || !normalized.includes('git commit') || !normalized.includes('git push')) {
+    return null;
+  }
+  const messageMatch = normalizeQuotes(text).match(/git commit\s+-m\s+["']([^"']+)["']/i);
+  const pushMatch = normalizeQuotes(text).match(/git push\s+([^\s]+)\s+([^\s]+)/i);
+  return {
+    commitMessage: messageMatch?.[1],
+    remote: pushMatch?.[1] ?? 'origin',
+    branch: pushMatch?.[2] ?? 'main',
+  };
+}
+
 export class OpenAIClient {
   private client: OpenAI;
   private cfg: SparrowConfig;
@@ -91,6 +131,73 @@ export class OpenAIClient {
     const model = getChatModel(this.cfg);
     const debugIO = process.env.SPARROW_DEBUG_IO === '1';
     const working = getWorkingState(chatId, db);
+    const inferredProject = inferProjectName(userText) ?? (working.currentProject || defaultProjectName());
+
+    if (working.pendingApproval) {
+      if (isSimpleApproval(userText) || isSimpleDenial(userText)) {
+        if (isSimpleApproval(userText)) {
+          let resultText = '';
+          try {
+            const actions = working.pendingApproval.actions ?? [
+              { tool: working.pendingApproval.tool, args: working.pendingApproval.args ?? {} },
+            ];
+            const outputs: string[] = [];
+            for (const action of actions) {
+              const actionTier = getActionTier(action.tool, String(action.args?.action ?? ''), tools.get(action.tool)?.permission);
+              const args = actionTier >= 2 ? { ...action.args, confirm: true } : action.args;
+              const result = await tools.run(action.tool, args, chatId);
+              outputs.push(typeof result === 'string' ? result : JSON.stringify(result, null, 2));
+            }
+            resultText = outputs.join('\n');
+            recordDecision(chatId, `User approved: ${working.pendingApproval.summary}`);
+          } catch (err) {
+            resultText = `Approval action failed: ${(err as Error).message}`;
+          }
+          const updated = mergeWorkingState(
+            working,
+            { pendingApproval: null, lastApprovalAt: new Date().toISOString() },
+            { maxObservations: 6, maxNextActions: 6 }
+          );
+          saveWorkingState(chatId, updated, db);
+          addMessage(chatId, 'assistant', resultText);
+          recordAssistantMessage(chatId, resultText);
+          return resultText;
+        }
+        const updated = mergeWorkingState(working, { pendingApproval: null }, { maxObservations: 6, maxNextActions: 6 });
+        saveWorkingState(chatId, updated, db);
+        const decline = 'Understood. I will not proceed without approval.';
+        addMessage(chatId, 'assistant', decline);
+        recordAssistantMessage(chatId, decline);
+        return decline;
+      }
+      const cleared = mergeWorkingState(working, { pendingApproval: null }, { maxObservations: 6, maxNextActions: 6 });
+      saveWorkingState(chatId, cleared, db);
+    }
+
+    const gitSequence = parseGitSequence(userText);
+    if (gitSequence) {
+      const commitMessage = gitSequence.commitMessage ?? 'test ai commit';
+      const remote = gitSequence.remote ?? 'origin';
+      const branch = gitSequence.branch ?? 'main';
+      const actions = [
+        { tool: 'git', args: { action: 'add', project: inferredProject, paths: ['.'] } },
+        { tool: 'git', args: { action: 'commit', project: inferredProject, message: commitMessage } },
+        { tool: 'git', args: { action: 'push', project: inferredProject, remote, branch } },
+      ];
+      const summary = `git add . then commit "${commitMessage}" then push ${remote} ${branch}`;
+      const updated = mergeWorkingState(
+        working,
+        {
+          pendingApproval: { tool: 'git', args: actions[0].args, summary, actions },
+        },
+        { maxObservations: 6, maxNextActions: 6 }
+      );
+      saveWorkingState(chatId, updated, db);
+      const prompt = `I can run: git add ., git commit -m "${commitMessage}", git push ${remote} ${branch}. Approve to proceed.`;
+      addMessage(chatId, 'assistant', prompt);
+      recordAssistantMessage(chatId, prompt);
+      return prompt;
+    }
 
     const userEventId = recordUserMessage(chatId, userText);
     const derivedFacts = deriveFactsFromMessage(userText);
@@ -100,7 +207,7 @@ export class OpenAIClient {
         type: 'derived_fact',
         payload: { text: fact.text, sourceEventId: userEventId },
       });
-      addMemoryItem(db, { chatId, kind: fact.kind, text: fact.text, eventId: factEventId });
+      addMemoryItem(db, { chatId, kind: fact.kind, text: fact.text, eventId: factEventId, project: inferredProject });
     }
 
     const decision = choose_next_step(working, userText);
@@ -121,7 +228,9 @@ export class OpenAIClient {
     const constraintBase = [
       'CLI tool is read-only; no writes, sudo, kills, or installs',
       'Ask at most one question only if needed',
-      'Tier2 writes are not allowed; output patch/diff only',
+      'Tier2 actions require user approval before running',
+      'Use workspace for all file reads and writes in ~/sparrow-projects',
+      'Use git tool for repository actions inside workspace projects only',
     ];
     if (assistant?.name) constraintBase.push(`Assistant name: ${assistant.name}`);
     if (assistant?.description) constraintBase.push(`Assistant description: ${assistant.description}`);
@@ -139,12 +248,13 @@ export class OpenAIClient {
         constraints: mergedConstraints,
         lastObservations: [...(working.lastObservations ?? []), ...observations],
         nextActions: decision.plan,
+        currentProject: inferredProject,
       },
       { maxObservations: 6, maxNextActions: 6 }
     );
     saveWorkingState(chatId, updatedState, db);
 
-    const retrieved = searchMemory(db, chatId, userText, 6);
+    const retrieved = searchMemory(db, chatId, userText, 6, 200, inferredProject);
     const recentToolNames = getRecentToolNames(chatId);
     const injection = injectMarkdown({
       userText,
@@ -212,7 +322,8 @@ CLI tool notes:
 - Redirects are only allowed to /dev/null (e.g., 2>/dev/null).
 - Prefer separate commands (e.g., "cd ~/projects", "ls -1", "git -C ~/projects/sparrow status").
 - You can use action=start to create a session and reuse sessionId across calls to preserve cwd.
-- For tools that support confirm=true on write actions (calendar/drive/n8n/filesystem/task_runner), set confirm=true when the user explicitly asks you to perform the write.
+- For tools that require confirm=true on Tier2 actions (calendar/drive/n8n/filesystem/task_runner/git), only set confirm=true after the user approves.
+- Use workspace for all file reads and writes in ~/sparrow-projects. Use git for repository operations in workspace projects.
 - Never search for or reveal secrets (API keys/tokens/passwords/private keys) or their locations.
 `,
       });
@@ -290,13 +401,47 @@ CLI tool notes:
           try {
             const args = JSON.parse(call.function.arguments || '{}');
             const result = await tools.run(call.function.name, args, chatId);
+            if (call.function.name === 'git' && result && typeof result === 'object') {
+              const action = String((args as any)?.action ?? '');
+              const stdout = String((result as any)?.stdout ?? '');
+              const updated = mergeWorkingState(
+                getWorkingState(chatId, db),
+                {
+                  currentProject: inferredProject,
+                  currentBranch: action === 'status' ? extractBranchFromStatus(stdout) : getWorkingState(chatId, db).currentBranch,
+                  lastDiffSummary: action === 'diff' ? String((result as any)?.summary ?? '') : getWorkingState(chatId, db).lastDiffSummary,
+                },
+                { maxObservations: 6, maxNextActions: 6 }
+              );
+              saveWorkingState(chatId, updated, db);
+            }
             const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
             accumulated.push({ role: 'tool', tool_call_id: call.id, content: text });
             addMessage(chatId, 'tool', text);
           } catch (err) {
-            const text = `Tool ${call.function.name} failed: ${(err as Error).message}`;
-            accumulated.push({ role: 'tool', tool_call_id: call.id, content: text });
-            logger.error(text);
+            const message = (err as Error).message;
+            if (message.includes('requires confirm=true')) {
+              const summary = `approval required for ${call.function.name} with args ${call.function.arguments || '{}'}`;
+              const updated = mergeWorkingState(
+                getWorkingState(chatId, db),
+                {
+                  pendingApproval: {
+                    tool: call.function.name,
+                    args: JSON.parse(call.function.arguments || '{}'),
+                    summary,
+                  },
+                },
+                { maxObservations: 6, maxNextActions: 6 }
+              );
+              saveWorkingState(chatId, updated, db);
+              const text = `Approval required for ${call.function.name} with args ${call.function.arguments || '{}'}. Ask the user to approve, then retry with confirm=true.`;
+              accumulated.push({ role: 'tool', tool_call_id: call.id, content: text });
+              logger.error(text);
+            } else {
+              const text = `Tool ${call.function.name} failed: ${message}`;
+              accumulated.push({ role: 'tool', tool_call_id: call.id, content: text });
+              logger.error(text);
+            }
           }
         }
         continue; // loop again for final answer
@@ -320,7 +465,7 @@ CLI tool notes:
         type: 'observation',
         payload: { text: episodicSummary, sourceEventId: userEventId },
       });
-      addMemoryItem(db, { chatId, kind: 'summary', text: episodicSummary, eventId: summaryEventId });
+      addMemoryItem(db, { chatId, kind: 'summary', text: episodicSummary, eventId: summaryEventId, project: inferredProject });
       sealPendingBlocks(db, { force: true });
       logger.info(`chat.out chatId=${chatId} chars=${content.length} text=${summarize(content, debugIO ? 4000 : 400)}`);
       return content;

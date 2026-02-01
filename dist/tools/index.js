@@ -19,6 +19,9 @@ import { projectSummaryTool } from './projectSummary.js';
 import { docIndexTool } from './docIndex.js';
 import { taskRunnerTool } from './taskRunner.js';
 import { snapshotTool } from './snapshot.js';
+import { whisperTool } from './whisper.js';
+import { workspaceTool } from './workspace.js';
+import { gitTool } from './git.js';
 export function buildToolRegistry(cfg) {
     const registry = new ToolRegistry();
     registry.register(systemInfoTool());
@@ -41,5 +44,8 @@ export function buildToolRegistry(cfg) {
     registry.register(calendarTool());
     registry.register(n8nTool());
     registry.register(weatherTool());
+    registry.register(whisperTool());
+    registry.register(workspaceTool());
+    registry.register(gitTool());
     return registry;
 }

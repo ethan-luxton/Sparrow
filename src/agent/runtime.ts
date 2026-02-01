@@ -14,6 +14,7 @@ import {
   sealPendingBlocks,
 } from '../memory/ledger.js';
 import { getWorkingState, mergeWorkingState, saveWorkingState } from '../memory/workingState.js';
+import { defaultProjectName, inferProjectName } from '../lib/workspace.js';
 import type { LLMResult, SummaryInput } from './llm.js';
 import {
   enqueueTask,
@@ -100,12 +101,13 @@ export class AgentRuntime {
     addMessage(chatId, 'user', text);
 
     const objective = setActiveObjective(chatId, text, this.db);
+    const working = getWorkingState(chatId, this.db);
     const decisionNotes: string[] = [];
 
     const facts = deriveFactsFromMessage(text);
     for (const fact of facts) {
       const factEventId = recordDerivedFact(chatId, fact.text);
-      addMemoryItem(this.db, { chatId, kind: fact.kind, text: fact.text, eventId: factEventId });
+      addMemoryItem(this.db, { chatId, kind: fact.kind, text: fact.text, eventId: factEventId, project: working.currentProject });
     }
 
     if (detectRepoRecon(text)) {
@@ -142,7 +144,7 @@ export class AgentRuntime {
       recordDecision(chatId, decisionNotes.join(' '));
     }
 
-    const working = getWorkingState(chatId, this.db);
+    const inferredProject = inferProjectName(text) ?? (working.currentProject || defaultProjectName());
     const updated = mergeWorkingState(
       working,
       {
@@ -154,6 +156,7 @@ export class AgentRuntime {
             'Ask at most one question only if needed.',
           ])
         ),
+        currentProject: inferredProject,
       },
       { maxObservations: 6, maxNextActions: 6 }
     );
@@ -256,7 +259,7 @@ export class AgentRuntime {
         const maxTokens = this.opts.tickMaxTokens ?? 280;
         const objective = getActiveObjective(chatId, this.db);
         const working = getWorkingState(chatId, this.db);
-        const memories = objective ? searchMemory(this.db, chatId, objective.text, 6) : [];
+        const memories = objective ? searchMemory(this.db, chatId, objective.text, 6, 200, working.currentProject) : [];
         const observations = working.lastObservations ?? [];
         const summaryInput = {
           objective: objective?.text ?? 'Summarize findings',

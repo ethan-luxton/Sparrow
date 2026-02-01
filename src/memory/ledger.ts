@@ -50,6 +50,7 @@ export interface MemoryItemInput {
   text: string;
   eventId: number;
   embedding?: number[];
+  project?: string | null;
 }
 
 export interface RetrievedMemory {
@@ -89,6 +90,7 @@ export function initLedger(db: Database.Database) {
       text TEXT,
       embedding TEXT,
       eventId INTEGER,
+      project TEXT,
       createdAt TEXT DEFAULT CURRENT_TIMESTAMP
     );`);
   db.exec(`CREATE TABLE IF NOT EXISTS working_state (
@@ -98,6 +100,11 @@ export function initLedger(db: Database.Database) {
     );`);
   db.exec('CREATE INDEX IF NOT EXISTS idx_ledger_events_block ON ledger_events(blockId, blockIndex);');
   db.exec('CREATE INDEX IF NOT EXISTS idx_memory_items_chat ON memory_items(chatId);');
+  try {
+    db.exec('ALTER TABLE memory_items ADD COLUMN project TEXT;');
+  } catch {
+    // ignore if column exists
+  }
 }
 
 function stableStringify(value: unknown): string {
@@ -289,8 +296,8 @@ export function addMemoryItem(db: Database.Database, input: MemoryItemInput): nu
   initLedger(db);
   const embedding = input.embedding ?? embedText(input.text);
   const info = db
-    .prepare('INSERT INTO memory_items (chatId, kind, text, embedding, eventId) VALUES (?, ?, ?, ?, ?)')
-    .run(input.chatId, input.kind, input.text, JSON.stringify(embedding), input.eventId);
+    .prepare('INSERT INTO memory_items (chatId, kind, text, embedding, eventId, project) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(input.chatId, input.kind, input.text, JSON.stringify(embedding), input.eventId, input.project ?? null);
   return Number(info.lastInsertRowid);
 }
 
@@ -313,7 +320,8 @@ export function searchMemory(
   chatId: number,
   query: string,
   limit = 5,
-  scanLimit = 200
+  scanLimit = 200,
+  project?: string
 ): RetrievedMemory[] {
   initLedger(db);
   const queryEmbedding = embedText(query);
@@ -354,6 +362,47 @@ export function searchMemory(
       score,
       citation: { blockId: row.blockId, eventId: row.eventId },
     });
+  }
+  if (project) {
+    const projectRows = db
+      .prepare(
+        `SELECT mi.id, mi.kind, mi.text, mi.embedding, mi.eventId, le.blockId
+         FROM memory_items mi
+         LEFT JOIN ledger_events le ON mi.eventId = le.id
+         WHERE mi.chatId = ? AND mi.project = ?
+         ORDER BY mi.id DESC
+         LIMIT ?`
+      )
+      .all(chatId, project, scanLimit) as {
+      id: number;
+      kind: MemoryKind;
+      text: string;
+      embedding: string;
+      eventId: number;
+      blockId: number | null;
+    }[];
+    const projectScored: RetrievedMemory[] = [];
+    for (const row of projectRows) {
+      if (!row.blockId) continue;
+      let vec: number[] | null = null;
+      try {
+        const parsed = JSON.parse(row.embedding);
+        if (Array.isArray(parsed)) vec = parsed.map((v) => Number(v));
+      } catch {
+        vec = null;
+      }
+      if (!vec) continue;
+      const score = cosineSimilarity(queryEmbedding, vec);
+      projectScored.push({
+        id: row.id,
+        kind: row.kind,
+        text: row.text,
+        score,
+        citation: { blockId: row.blockId, eventId: row.eventId },
+      });
+    }
+    const combined = [...projectScored, ...scored];
+    return combined.sort((a, b) => b.score - a.score).slice(0, limit);
   }
   return scored.sort((a, b) => b.score - a.score).slice(0, limit);
 }

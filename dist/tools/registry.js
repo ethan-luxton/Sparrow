@@ -92,6 +92,28 @@ const ALLOW_ACTIONS = {
     n8n: new Set(['list_workflows', 'get_workflow', 'list_executions', 'workflow_schema']),
     filesystem: new Set(['read', 'list', 'read_pdf_text', 'read_docx_text']),
     notes: new Set(['add', 'list']),
+    workspace: new Set([
+        'ensure_workspace',
+        'list_projects',
+        'ensure_project',
+        'read_file',
+        'write_file',
+        'apply_patch',
+        'list_files',
+        'search',
+    ]),
+    git: new Set([
+        'status',
+        'log',
+        'diff',
+        'show',
+        'branch_list',
+        'branch_create',
+        'fetch',
+        'add',
+        'init',
+        'config_list',
+    ]),
 };
 const CONFIRM_ACTIONS = {
     google_calendar: new Set(['create_event', 'update_event', 'delete_event', 'quick_add']),
@@ -99,6 +121,19 @@ const CONFIRM_ACTIONS = {
     n8n: new Set(['create_workflow']),
     filesystem: new Set(['write', 'write_pdf']),
     task_runner: new Set(['run']),
+    git: new Set([
+        'checkout',
+        'switch',
+        'pull',
+        'push',
+        'commit',
+        'stash',
+        'restore',
+        'reset',
+        'merge',
+        'rebase',
+        'tag',
+    ]),
 };
 function enforceToolPolicy(tool, args) {
     if (tool.permission !== 'write')
@@ -144,7 +179,7 @@ function enforceSensitiveAccess(toolName, args) {
             maybeBlock('CLI commands that search for secrets or sensitive files are blocked.');
         }
     }
-    if (toolName === 'file_snippet' || toolName === 'file_diff' || toolName === 'filesystem') {
+    if (toolName === 'file_snippet' || toolName === 'file_diff' || toolName === 'filesystem' || toolName === 'workspace') {
         const pathArg = args?.path ?? args?.pathA ?? '';
         if (pathArg && isSensitivePath(String(pathArg))) {
             maybeBlock('Reading sensitive files (e.g., .env, private keys) is blocked.');
@@ -160,6 +195,12 @@ function enforceSensitiveAccess(toolName, args) {
         const query = String(args?.query ?? '');
         if (isSensitiveQuery(query)) {
             maybeBlock('Gmail searches for secrets are blocked.');
+        }
+    }
+    if (toolName === 'workspace' && action === 'search') {
+        const query = String(args?.query ?? '');
+        if (isSensitiveQuery(query)) {
+            maybeBlock('Workspace searches for secrets are blocked.');
         }
     }
 }

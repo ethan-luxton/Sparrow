@@ -5,6 +5,10 @@ export function getChatModel(cfg: SparrowConfig): string {
   return cfg.openai?.model ?? process.env.OPENAI_MODEL ?? 'gpt-5-mini';
 }
 
+export function getCodingModel(cfg: SparrowConfig): string {
+  return cfg.openai?.codeModel ?? process.env.OPENAI_CODE_MODEL ?? 'gpt-5.1-codex-mini';
+}
+
 export function supportsTools(cfg: SparrowConfig): boolean {
   return true;
 }
@@ -17,4 +21,8 @@ export function createChatClient(cfg: SparrowConfig): OpenAI {
   const apiKey = getSecret(cfg, 'openai.apiKey');
   const baseURL = cfg.openai?.baseUrl ?? process.env.OPENAI_BASE_URL;
   return new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
+}
+
+export function createCodingClient(cfg: SparrowConfig): OpenAI {
+  return createChatClient(cfg);
 }
