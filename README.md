@@ -101,4 +101,4 @@ Some Linux setups need IPv4 for Telegram long polling. Use:
 Issues and PRs are welcome. Keep changes scoped, add tests for safety or policy logic, and avoid breaking the tool allowlists.
 
 ## License
-Add a license file to your repo. MIT is a good default for open source projects.
+MIT License. See `LICENSE`.
