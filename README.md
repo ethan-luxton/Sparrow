@@ -39,6 +39,7 @@ Local, tool enabled Telegram assistant with autonomous runtime, workspace suppor
 4. Build and initialize
    ```bash
    npm run build
+   npm link
    node dist/cli.js init
    ```
 5. Optional Google OAuth
