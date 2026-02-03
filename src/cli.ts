@@ -14,6 +14,7 @@ import { logsDir } from './config/paths.js';
 import { logger } from './lib/logger.js';
 import { addMessage, clearChat } from './lib/db.js';
 import { OpenAIClient } from './lib/openaiClient.js';
+import { startDashboard } from './dashboard/server.js';
 
 const program = new Command();
 program.name('sparrow').description('Local-only AI agent');
@@ -298,6 +299,19 @@ program
     const content = fs.readFileSync(latest, 'utf8');
     const lines = content.trim().split('\n');
     console.log(lines.slice(-100).join('\n'));
+  });
+
+program
+  .command('dashboard')
+  .description('Start local Sparrow monitoring dashboard')
+  .option('--host <host>', 'Host to bind (use 0.0.0.0 for LAN)', '0.0.0.0')
+  .option('--port <port>', 'Port to listen on', '5527')
+  .action((options) => {
+    const port = Number(options.port);
+    if (!Number.isFinite(port) || port <= 0) {
+      throw new Error('Invalid port.');
+    }
+    startDashboard({ host: options.host, port });
   });
 
 program.parseAsync(process.argv).catch((err) => {
