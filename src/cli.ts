@@ -12,8 +12,11 @@ import { runGoogleAuth } from './google/auth.js';
 import { buildToolRegistry } from './tools/index.js';
 import { logsDir } from './config/paths.js';
 import { logger } from './lib/logger.js';
-import { addMessage, clearChat } from './lib/db.js';
+import { addMessage, clearChat, getDbHandle } from './lib/db.js';
 import { OpenAIClient } from './lib/openaiClient.js';
+import { verifyAllChains, verifyChain } from './memory-ledger/verifier.js';
+import { MemoryRetriever } from './memory-ledger/retriever.js';
+import { migrateMessagesToLedger } from './memory-ledger/migrate.js';
 import { startDashboard } from './dashboard/server.js';
 
 const program = new Command();
@@ -312,6 +315,63 @@ program
       throw new Error('Invalid port.');
     }
     startDashboard({ host: options.host, port });
+  });
+
+const memoryCmd = program.command('memory').description('Ledger memory utilities');
+memoryCmd
+  .command('verify')
+  .option('-c, --chain <id>', 'Specific chain id to verify')
+  .action((options) => {
+    const db = getDbHandle();
+    if (options.chain) {
+      const result = verifyChain(db, options.chain);
+      console.log(JSON.stringify(result, null, 2));
+      return;
+    }
+    const result = verifyAllChains(db);
+    console.log(JSON.stringify(result, null, 2));
+  });
+memoryCmd
+  .command('inspect')
+  .requiredOption('-b, --block <id>', 'Block id')
+  .action((options) => {
+    const db = getDbHandle();
+    const retriever = new MemoryRetriever(db);
+    const block = retriever.getBlockById(options.block);
+    if (!block) {
+      console.log('Block not found.');
+      return;
+    }
+    console.log(JSON.stringify(block, null, 2));
+  });
+memoryCmd
+  .command('export')
+  .requiredOption('-c, --chain <id>', 'Chain id')
+  .action((options) => {
+    const db = getDbHandle();
+    const retriever = new MemoryRetriever(db);
+    const blocks = retriever.getRecentBlocks(options.chain, 10_000);
+    console.log(JSON.stringify({ chainId: options.chain, blocks }, null, 2));
+  });
+memoryCmd
+  .command('replay')
+  .requiredOption('-c, --chain <id>', 'Chain id')
+  .option('-l, --limit <n>', 'Limit messages', '200')
+  .action((options) => {
+    const db = getDbHandle();
+    const retriever = new MemoryRetriever(db);
+    const blocks = retriever.getRecentBlocks(options.chain, Number(options.limit));
+    blocks.forEach((b) => {
+      console.log(`[${b.height} ${b.role}] ${b.content}`);
+    });
+  });
+memoryCmd
+  .command('migrate')
+  .description('Migrate legacy messages to ledger blocks')
+  .action(() => {
+    const db = getDbHandle();
+    const result = migrateMessagesToLedger(db);
+    console.log(JSON.stringify(result, null, 2));
   });
 
 program.parseAsync(process.argv).catch((err) => {

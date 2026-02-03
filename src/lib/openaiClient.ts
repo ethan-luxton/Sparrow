@@ -25,6 +25,8 @@ import type { WorkingState } from '../memory/workingState.js';
 import { injectMarkdown } from './markdown/injector.js';
 import { migrateWorkspaceDocs } from './markdown/migration.js';
 import { defaultProjectName, inferProjectName } from './workspace.js';
+import { MemoryContextBuilder } from '../memory-ledger/contextBuilder.js';
+import { chainIdFromChatId } from '../memory-ledger/writer.js';
 
 function summarize(text: string, maxLen: number) {
   if (text.length <= maxLen) return text;
@@ -262,6 +264,12 @@ export class OpenAIClient {
     saveWorkingState(chatId, updatedState, db);
 
     const retrieved = searchMemory(db, chatId, userText, 6, 200, inferredProject);
+    const ledgerContext = new MemoryContextBuilder(db).build(chainIdFromChatId(chatId), userText, {
+      maxBlocks: 6,
+      maxContextChars: 1800,
+      recentLimit: 6,
+      timeWindowDays: 45,
+    });
     const recentToolNames = getRecentToolNames(chatId);
     const injection = injectMarkdown({
       userText,
@@ -275,6 +283,14 @@ export class OpenAIClient {
             {
               role: 'system',
               content: `Workspace docs:\n${injection.text}`,
+            },
+          ] as ChatCompletionMessageParam[])
+        : []),
+      ...(ledgerContext
+        ? ([
+            {
+              role: 'system',
+              content: `Memory context (ledger, cited):\n${ledgerContext}`,
             },
           ] as ChatCompletionMessageParam[])
         : []),
