@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PixelTrail AI Monitor · Chat</title>
+    <link rel="stylesheet" href="/assets/dashboard.css" />
+  </head>
+  <body data-page="chat">
+    <header>
+      <div class="header-top">
+        <div>
+          <div class="title">PixelTrail AI Monitor</div>
+          <div class="subtitle" id="subtitle">Send a message to PixelTrail AI.</div>
+        </div>
+        <nav class="nav">
+          <a href="/" data-page="overview">Overview</a>
+          <a href="/logs" data-page="logs">Tool Logs & Logs</a>
+          <a href="/database" data-page="database">Database</a>
+          <a href="/chat" data-page="chat">Chat</a>
+        </nav>
+      </div>
+    </header>
+    <div class="sections">
+      <section class="section">
+        <div class="section-title">Chat</div>
+        <div class="grid">
+          <div class="card wide">
+            <h2>Chat</h2>
+            <div class="chat">
+              <div class="chat-messages" id="chat-messages"></div>
+              <div class="chat-input">
+                <input id="chat-input" placeholder="Message PixelTrail AI…" />
+                <button id="chat-send">Send</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <script src="/assets/dashboard.js"></script>
+  </body>
+</html>

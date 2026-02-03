@@ -93,9 +93,9 @@ program
     const send = async (text: string) => {
       try {
         addMessage(chatId, 'user', text);
-        const reply = await openai.chat(chatId, text, tools);
-        console.log(reply);
-        return reply;
+        const result = await openai.chat(chatId, text, tools);
+        console.log(result.reply);
+        return result.reply;
       } catch (err) {
         const msg = (err as Error).message;
         logger.error(`cli.chat.error chatId=${chatId} err=${msg}`);

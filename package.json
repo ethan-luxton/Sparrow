@@ -8,7 +8,7 @@
     "pt": "dist/cli.js"
   },
   "scripts": {
-    "build": "tsc && node scripts/copy-dashboard-assets.js",
+    "build": "tsc && node scripts/copy-dashboard-assets.js && node scripts/ensure-cli-bin.js",
     "dev": "ts-node src/cli.ts",
     "run": "node dist/cli.js run",
     "lint": "eslint ."

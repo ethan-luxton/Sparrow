@@ -124,8 +124,8 @@ async function handleAudioMessage(
   }
 
   pendingMedia.set(chatId, { audioPath, transcript: transcriptText });
-  const reply = await openai.chat(chatId, transcriptText, tools);
-  await chunkAndSend(bot, chatId, reply);
+  const result = await openai.chat(chatId, transcriptText, tools);
+  await chunkAndSend(bot, chatId, result.reply);
   await bot.sendMessage(chatId, 'Do you want me to save the audio and transcript to your workspace? Reply yes or no.');
 }
 
@@ -271,9 +271,9 @@ export function startTelegramBot(opts?: { debugIO?: boolean }) {
           logger.info(`telegram.in chatId=${chatId} text=${summarizeLog(redactSensitiveText(msg.text))}`);
           addMessage(chatId, 'user', msg.text);
           await bot.sendChatAction(chatId, 'typing');
-          const reply = await openai.chat(chatId, msg.text, tools);
-          logger.info(`telegram.out chatId=${chatId} chars=${reply.length} text=${summarizeLog(reply)}`);
-          await chunkAndSend(bot, chatId, reply);
+          const result = await openai.chat(chatId, msg.text, tools);
+          logger.info(`telegram.out chatId=${chatId} chars=${result.reply.length} text=${summarizeLog(result.reply)}`);
+          await chunkAndSend(bot, chatId, result.reply);
           return;
         }
       } catch (err) {

@@ -2,7 +2,7 @@ import path from 'node:path';
 import os from 'node:os';
 
 export const homeDir = os.homedir();
-export const baseDir = path.join(homeDir, '.pixeltrail');
+export const baseDir = path.join(homeDir, '.pixeltrailai');
 export const configPath = path.join(baseDir, 'config.json');
 export const dbPath = path.join(baseDir, 'pixeltrail.db');
 export const logsDir = path.join(baseDir, 'logs');
