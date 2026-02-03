@@ -25,6 +25,8 @@ import type { WorkingState } from '../memory/workingState.js';
 import { injectMarkdown } from './markdown/injector.js';
 import { migrateWorkspaceDocs } from './markdown/migration.js';
 import { defaultProjectName, inferProjectName } from './workspace.js';
+import { MemoryContextBuilder } from '../memory-ledger/contextBuilder.js';
+import { chainIdFromChatId } from '../memory-ledger/writer.js';
 
 function summarize(text: string, maxLen: number) {
   if (text.length <= maxLen) return text;
@@ -262,6 +264,12 @@ export class OpenAIClient {
     saveWorkingState(chatId, updatedState, db);
 
     const retrieved = searchMemory(db, chatId, userText, 6, 200, inferredProject);
+    const ledgerContext = new MemoryContextBuilder(db).build(chainIdFromChatId(chatId), userText, {
+      maxBlocks: 6,
+      maxContextChars: 1800,
+      recentLimit: 6,
+      timeWindowDays: 45,
+    });
     const recentToolNames = getRecentToolNames(chatId);
     const injection = injectMarkdown({
       userText,
@@ -275,6 +283,14 @@ export class OpenAIClient {
             {
               role: 'system',
               content: `Workspace docs:\n${injection.text}`,
+            },
+          ] as ChatCompletionMessageParam[])
+        : []),
+      ...(ledgerContext
+        ? ([
+            {
+              role: 'system',
+              content: `Memory context (ledger, cited):\n${ledgerContext}`,
             },
           ] as ChatCompletionMessageParam[])
         : []),
@@ -329,7 +345,7 @@ CLI tool notes:
 - Redirects are only allowed to /dev/null (e.g., 2>/dev/null).
 - Prefer separate commands (e.g., "cd ~/projects", "ls -1", "git -C ~/projects/pixeltrail status").
 - You can use action=start to create a session and reuse sessionId across calls to preserve cwd.
-- For tools that require confirm=true on Tier2 actions (calendar/drive/n8n/filesystem/task_runner/git), only set confirm=true after the user approves.
+- For tools that require confirm=true on Tier2 actions (calendar/drive/n8n/filesystem/task_runner/git), set confirm=true when the user explicitly requests the action; otherwise ask once for approval.
 - Use workspace for all file reads and writes in ~/pixeltrail-projects. Use git for repository operations in workspace projects.
 - Never search for or reveal secrets (API keys/tokens/passwords/private keys) or their locations.
 `,

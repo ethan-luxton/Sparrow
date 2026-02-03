@@ -1,0 +1,100 @@
+const STOPWORDS = new Set([
+  'a',
+  'an',
+  'the',
+  'and',
+  'or',
+  'but',
+  'if',
+  'then',
+  'than',
+  'to',
+  'of',
+  'in',
+  'on',
+  'for',
+  'with',
+  'by',
+  'from',
+  'as',
+  'at',
+  'is',
+  'are',
+  'was',
+  'were',
+  'be',
+  'been',
+  'being',
+  'it',
+  'this',
+  'that',
+  'these',
+  'those',
+  'i',
+  'you',
+  'we',
+  'they',
+  'he',
+  'she',
+  'them',
+  'my',
+  'your',
+  'our',
+  'their',
+  'me',
+  'us',
+  'him',
+  'her',
+  'not',
+  'no',
+  'yes',
+  'do',
+  'does',
+  'did',
+  'done',
+  'can',
+  'could',
+  'should',
+  'would',
+  'will',
+  'just',
+  'about',
+  'into',
+  'out',
+  'over',
+  'under',
+  'up',
+  'down',
+  'again',
+  'more',
+  'most',
+  'some',
+  'any',
+  'all',
+  'also',
+  'like',
+  'than',
+  'so',
+  'such',
+  'very',
+  'too',
+  'via',
+  'etc',
+]);
+
+export function normalizeKeywords(text: string, limit = 32): string[] {
+  if (!text) return [];
+  const tokens = text
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 3 && !STOPWORDS.has(t));
+  const unique = Array.from(new Set(tokens));
+  return unique.slice(0, limit);
+}
+
+export function extractReferencedBlockIds(text: string): string[] {
+  if (!text) return [];
+  const matches = text.match(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi) ?? [];
+  return Array.from(new Set(matches.map((m) => m.toLowerCase())));
+}

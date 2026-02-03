@@ -1,6 +1,8 @@
 import Database from 'better-sqlite3';
 import fs from 'fs-extra';
 import { dbPath } from '../config/paths.js';
+import { applyLedgerMigrations, appendMessage as appendLedgerMessage, chainIdFromChatId } from '../memory-ledger/index.js';
+import { logger } from './logger.js';
 
 let db: Database.Database | null = null;
 
@@ -135,14 +137,36 @@ function ensureDb() {
     db.exec('CREATE INDEX IF NOT EXISTS idx_ledger_events_block ON ledger_events(blockId, blockIndex);');
     db.exec('CREATE INDEX IF NOT EXISTS idx_memory_items_chat ON memory_items(chatId);');
     db.exec('CREATE INDEX IF NOT EXISTS idx_model_usage_created ON model_usage(createdAt);');
+    applyLedgerMigrations(db);
   }
   return db;
 }
 
-export function addMessage(chatId: number, role: StoredMessage['role'], content: string) {
+export function addMessage(
+  chatId: number,
+  role: StoredMessage['role'],
+  content: string,
+  opts?: { metadata?: Record<string, unknown>; tags?: string[]; references?: string[] }
+) {
   const database = ensureDb();
   database.prepare('INSERT OR IGNORE INTO chats (chatId) VALUES (?)').run(chatId);
   database.prepare('INSERT INTO messages (chatId, role, content) VALUES (?, ?, ?)').run(chatId, role, content);
+  try {
+    appendLedgerMessage(
+      database,
+      {
+        chainId: chainIdFromChatId(chatId),
+        role,
+        content,
+        tags: opts?.tags,
+        references: opts?.references,
+        metadata: opts?.metadata ?? null,
+      },
+      undefined
+    );
+  } catch (err) {
+    logger.warn(`ledger append failed: ${(err as Error).message}`);
+  }
 }
 
 export function getMessages(chatId: number, limit = 10): StoredMessage[] {

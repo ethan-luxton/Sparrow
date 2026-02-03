@@ -147,6 +147,8 @@ export function startTelegramBot(opts?: { debugIO?: boolean }) {
     options: {
       tickMaxToolCalls: cfg.agent?.tickMaxToolCalls,
       tickMaxTokens: cfg.agent?.tickMaxTokens,
+      proactiveIntervalMs: (cfg.agent?.proactiveIntervalMinutes ?? 60) * 60 * 1000,
+      proactiveIdleMs: (cfg.agent?.proactiveIdleMinutes ?? 30) * 60 * 1000,
     },
   });
   startHeartbeat(bot, cfg, { queue });

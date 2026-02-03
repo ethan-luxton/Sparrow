@@ -78,6 +78,8 @@ export interface PixelTrailConfig {
     tickMs?: number;
     tickMaxToolCalls?: number;
     tickMaxTokens?: number;
+    proactiveIntervalMinutes?: number;
+    proactiveIdleMinutes?: number;
   };
 }
 
@@ -115,7 +117,7 @@ const defaultConfig: PixelTrailConfig = {
     maxHistory: 12,
     checkinIntervalHours: 24,
     checkinMessage: 'How are things going? Share any updates or tasks I should remember.',
-    heartbeatIntervalHours: 3,
+    heartbeatIntervalHours: 1,
     heartbeatMaxTokens: 180,
     heartbeatAckMaxChars: 300,
   },
@@ -126,6 +128,8 @@ const defaultConfig: PixelTrailConfig = {
     tickMs: 1500,
     tickMaxToolCalls: 1,
     tickMaxTokens: 320,
+    proactiveIntervalMinutes: 60,
+    proactiveIdleMinutes: 30,
   },
 };
 

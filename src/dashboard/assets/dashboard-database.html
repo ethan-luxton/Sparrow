@@ -85,6 +85,100 @@
           </div>
         </div>
       </section>
+      <section class="section">
+        <div class="section-title">Ledger</div>
+        <div class="grid">
+          <div class="card wide">
+            <h2>Ledger Blocks</h2>
+            <div class="controls">
+              <label>
+                Chain ID
+                <input id="db-ledger-chain" placeholder="chain id" />
+              </label>
+              <label>
+                Role
+                <select id="db-ledger-role">
+                  <option value="">All</option>
+                  <option value="user">user</option>
+                  <option value="assistant">assistant</option>
+                  <option value="tool">tool</option>
+                  <option value="system">system</option>
+                </select>
+              </label>
+              <label>
+                Keyword
+                <input id="db-ledger-keyword" placeholder="keyword" />
+              </label>
+              <label>
+                Search
+                <input id="db-ledger-search" placeholder="content contains" />
+              </label>
+              <label>
+                Limit
+                <input id="db-ledger-limit" type="number" min="10" max="500" value="120" />
+              </label>
+              <button id="db-ledger-refresh">Refresh</button>
+            </div>
+            <div class="table-wrap">
+              <table id="db-ledger-blocks"></table>
+            </div>
+            <div class="muted" id="db-ledger-count"></div>
+          </div>
+          <div class="card wide">
+            <h2>Ledger Summaries</h2>
+            <div class="controls">
+              <label>
+                Chain ID
+                <input id="db-sum-chain" placeholder="chain id" />
+              </label>
+              <label>
+                Limit
+                <input id="db-sum-limit" type="number" min="10" max="500" value="120" />
+              </label>
+              <button id="db-sum-refresh">Refresh</button>
+            </div>
+            <div class="table-wrap">
+              <table id="db-ledger-summaries"></table>
+            </div>
+            <div class="muted" id="db-sum-count"></div>
+          </div>
+          <div class="card">
+            <h2>Ledger Chains</h2>
+            <div class="controls">
+              <label>
+                Limit
+                <input id="db-chain-limit" type="number" min="10" max="500" value="120" />
+              </label>
+              <button id="db-chain-refresh">Refresh</button>
+            </div>
+            <div class="table-wrap">
+              <table id="db-ledger-chains"></table>
+            </div>
+          </div>
+          <div class="card">
+            <h2>Ledger Keywords</h2>
+            <div class="controls">
+              <label>
+                Chain ID
+                <input id="db-kw-chain" placeholder="chain id" />
+              </label>
+              <label>
+                Keyword
+                <input id="db-kw-keyword" placeholder="keyword" />
+              </label>
+              <label>
+                Limit
+                <input id="db-kw-limit" type="number" min="10" max="500" value="120" />
+              </label>
+              <button id="db-kw-refresh">Refresh</button>
+            </div>
+            <div class="table-wrap">
+              <table id="db-ledger-keywords"></table>
+            </div>
+            <div class="muted" id="db-kw-count"></div>
+          </div>
+        </div>
+      </section>
     </div>
     <script src="/assets/dashboard.js"></script>
   </body>
