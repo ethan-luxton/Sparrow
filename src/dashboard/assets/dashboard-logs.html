@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PixelTrail AI Monitor · Logs</title>
+    <link rel="stylesheet" href="/assets/dashboard.css" />
+  </head>
+  <body data-page="logs">
+    <header>
+      <div class="header-top">
+        <div>
+          <div class="title">PixelTrail AI Monitor</div>
+          <div class="subtitle" id="subtitle">Tool logs and latest system logs.</div>
+        </div>
+        <nav class="nav">
+          <a href="/" data-page="overview">Overview</a>
+          <a href="/logs" data-page="logs">Tool Logs & Logs</a>
+          <a href="/database" data-page="database">Database</a>
+          <a href="/chat" data-page="chat">Chat</a>
+        </nav>
+      </div>
+    </header>
+    <div class="sections">
+      <section class="section">
+        <div class="section-title">Tool Logs</div>
+        <div class="grid">
+          <div class="card wide">
+            <h2>Tool Logs (Full Content)</h2>
+            <div class="controls">
+              <label>
+                Chat ID
+                <input id="db-tool-chat" type="number" placeholder="All" />
+              </label>
+              <label>
+                Tool
+                <input id="db-tool-name" placeholder="tool name" />
+              </label>
+              <label>
+                Action
+                <input id="db-tool-action" placeholder="action" />
+              </label>
+              <label>
+                Limit
+                <input id="db-tool-limit" type="number" min="10" max="500" value="120" />
+              </label>
+              <button id="db-tool-refresh">Refresh</button>
+            </div>
+            <div class="table-wrap">
+              <table id="db-tool-logs"></table>
+            </div>
+            <div class="muted" id="db-tool-count"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-title">Logs</div>
+        <div class="grid">
+          <div class="card">
+            <h2>Latest Logs</h2>
+            <div class="log" id="log-lines"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <script src="/assets/dashboard.js"></script>
+  </body>
+</html>

@@ -1,5 +1,5 @@
 import { SYSTEM_PROMPT } from './prompt.js';
-import { addMessage, getDbHandle, getUserProfile } from './db.js';
+import { addMessage, getDbHandle, getUserProfile, recordModelUsage } from './db.js';
 import { PixelTrailConfig } from '../config/config.js';
 import { logger } from './logger.js';
 import { ToolRegistry } from '../tools/registry.js';
@@ -122,7 +122,14 @@ export class OpenAIClient {
     this.cfg = cfg;
   }
 
-  async chat(chatId: number, userText: string, tools: ToolRegistry) {
+  async chat(
+    chatId: number,
+    userText: string,
+    tools: ToolRegistry
+  ): Promise<{
+    reply: string;
+    usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
+  }> {
     migrateWorkspaceDocs();
     const db = getDbHandle();
     const profile = getUserProfile(chatId);
@@ -161,14 +168,14 @@ export class OpenAIClient {
           saveWorkingState(chatId, updated, db);
           addMessage(chatId, 'assistant', resultText);
           recordAssistantMessage(chatId, resultText);
-          return resultText;
+          return { reply: resultText };
         }
         const updated = mergeWorkingState(working, { pendingApproval: null }, { maxObservations: 6, maxNextActions: 6 });
         saveWorkingState(chatId, updated, db);
         const decline = 'Understood. I will not proceed without approval.';
         addMessage(chatId, 'assistant', decline);
         recordAssistantMessage(chatId, decline);
-        return decline;
+        return { reply: decline };
       }
       const cleared = mergeWorkingState(working, { pendingApproval: null }, { maxObservations: 6, maxNextActions: 6 });
       saveWorkingState(chatId, cleared, db);
@@ -196,7 +203,7 @@ export class OpenAIClient {
       const prompt = `I can run: git add ., git commit -m "${commitMessage}", git push ${remote} ${branch}. Approve to proceed.`;
       addMessage(chatId, 'assistant', prompt);
       recordAssistantMessage(chatId, prompt);
-      return prompt;
+      return { reply: prompt };
     }
 
     const userEventId = recordUserMessage(chatId, userText);
@@ -334,6 +341,7 @@ CLI tool notes:
     let toolIterations = 0;
     const maxToolIterations = 12;
     const seenToolCalls = new Set<string>();
+    const usageTotals = { promptTokens: 0, completionTokens: 0, totalTokens: 0, calls: 0 };
 
     while (true) {
       const request: any = {
@@ -348,6 +356,25 @@ CLI tool notes:
       const baseUrl = this.cfg.openai?.baseUrl ?? process.env.OPENAI_BASE_URL ?? 'https://api.openai.com';
       logger.info(`outbound.openai chatId=${chatId} model=${model} baseUrl=${baseUrl}`);
       const completion = await withTimeout(this.client.chat.completions.create(request), timeoutMs);
+      const usage = completion.usage as
+        | { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; input_tokens?: number; output_tokens?: number }
+        | undefined;
+      const hasUsage =
+        typeof usage?.prompt_tokens === 'number' ||
+        typeof usage?.input_tokens === 'number' ||
+        typeof usage?.completion_tokens === 'number' ||
+        typeof usage?.output_tokens === 'number' ||
+        typeof usage?.total_tokens === 'number';
+      if (usage && hasUsage) {
+        const promptTokens = Number(usage.prompt_tokens ?? usage.input_tokens ?? 0);
+        const completionTokens = Number(usage.completion_tokens ?? usage.output_tokens ?? 0);
+        const totalTokens = Number(usage.total_tokens ?? promptTokens + completionTokens);
+        recordModelUsage(chatId, model, { promptTokens, completionTokens, totalTokens });
+        if (Number.isFinite(promptTokens)) usageTotals.promptTokens += promptTokens;
+        if (Number.isFinite(completionTokens)) usageTotals.completionTokens += completionTokens;
+        if (Number.isFinite(totalTokens)) usageTotals.totalTokens += totalTokens;
+        usageTotals.calls += 1;
+      }
 
       const msg = completion.choices[0].message;
       if (!msg) throw new Error('No completion message');
@@ -365,7 +392,16 @@ CLI tool notes:
           const text = 'Tool calls are disabled for the current model configuration.';
           addMessage(chatId, 'assistant', text);
           logger.warn(`chat.tool_calls_blocked chatId=${chatId} model=${model}`);
-          return text;
+          return {
+            reply: text,
+            usage: usageTotals.calls
+              ? {
+                  promptTokens: usageTotals.promptTokens,
+                  completionTokens: usageTotals.completionTokens,
+                  totalTokens: usageTotals.totalTokens,
+                }
+              : undefined,
+          };
         }
         const toolNames = msg.tool_calls
           .map((c) => (c.type === 'function' ? c.function?.name : undefined))
@@ -377,7 +413,16 @@ CLI tool notes:
           const halt = 'Tool call limit reached; please clarify or simplify the request.';
           addMessage(chatId, 'assistant', halt);
           logger.warn(`chat.tool_limit chatId=${chatId} limit=${maxToolIterations}`);
-          return halt;
+          return {
+            reply: halt,
+            usage: usageTotals.calls
+              ? {
+                  promptTokens: usageTotals.promptTokens,
+                  completionTokens: usageTotals.completionTokens,
+                  totalTokens: usageTotals.totalTokens,
+                }
+              : undefined,
+          };
         }
         // Store the assistant tool request
         accumulated.push({ role: 'assistant', tool_calls: msg.tool_calls, content: msg.content ?? '' });
@@ -454,7 +499,16 @@ CLI tool notes:
         const fallback = 'No response generated by the model.';
         addMessage(chatId, 'assistant', fallback);
         logger.warn(`chat.empty_response chatId=${chatId} model=${model}`);
-        return fallback;
+        return {
+          reply: fallback,
+          usage: usageTotals.calls
+            ? {
+                promptTokens: usageTotals.promptTokens,
+                completionTokens: usageTotals.completionTokens,
+                totalTokens: usageTotals.totalTokens,
+              }
+            : undefined,
+        };
       }
       addMessage(chatId, 'assistant', content);
       recordAssistantMessage(chatId, content);
@@ -470,7 +524,16 @@ CLI tool notes:
       addMemoryItem(db, { chatId, kind: 'summary', text: episodicSummary, eventId: summaryEventId, project: inferredProject });
       sealPendingBlocks(db, { force: true });
       logger.info(`chat.out chatId=${chatId} chars=${content.length} text=${summarize(content, debugIO ? 4000 : 400)}`);
-      return content;
+      return {
+        reply: content,
+        usage: usageTotals.calls
+          ? {
+              promptTokens: usageTotals.promptTokens,
+              completionTokens: usageTotals.completionTokens,
+              totalTokens: usageTotals.totalTokens,
+            }
+          : undefined,
+      };
     }
   }
 }

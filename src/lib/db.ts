@@ -121,10 +121,20 @@ function ensureDb() {
       lastNotifiedAt TEXT,
       updatedAt TEXT DEFAULT CURRENT_TIMESTAMP
     );`);
+    db.exec(`CREATE TABLE IF NOT EXISTS model_usage (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chatId INTEGER,
+      model TEXT,
+      promptTokens INTEGER,
+      completionTokens INTEGER,
+      totalTokens INTEGER,
+      createdAt TEXT DEFAULT CURRENT_TIMESTAMP
+    );`);
     db.exec('CREATE INDEX IF NOT EXISTS idx_agent_objectives_chat ON agent_objectives(chatId, status);');
     db.exec('CREATE INDEX IF NOT EXISTS idx_agent_tasks_chat ON agent_tasks(chatId, status);');
     db.exec('CREATE INDEX IF NOT EXISTS idx_ledger_events_block ON ledger_events(blockId, blockIndex);');
     db.exec('CREATE INDEX IF NOT EXISTS idx_memory_items_chat ON memory_items(chatId);');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_model_usage_created ON model_usage(createdAt);');
   }
   return db;
 }
@@ -153,6 +163,25 @@ export function logTool(chatId: number, tool: string, action: string, payload: u
   database
     .prepare('INSERT INTO tool_logs (chatId, tool, action, payload, result) VALUES (?, ?, ?, ?, ?)')
     .run(chatId, tool, action, JSON.stringify(payload), JSON.stringify(result));
+}
+
+export function recordModelUsage(
+  chatId: number,
+  model: string,
+  usage: { promptTokens?: number; completionTokens?: number; totalTokens?: number }
+) {
+  const database = ensureDb();
+  database
+    .prepare(
+      'INSERT INTO model_usage (chatId, model, promptTokens, completionTokens, totalTokens) VALUES (?, ?, ?, ?, ?)'
+    )
+    .run(
+      chatId,
+      model,
+      Number.isFinite(usage.promptTokens) ? usage.promptTokens : null,
+      Number.isFinite(usage.completionTokens) ? usage.completionTokens : null,
+      Number.isFinite(usage.totalTokens) ? usage.totalTokens : null
+    );
 }
 
 export function listChats(): number[] {
