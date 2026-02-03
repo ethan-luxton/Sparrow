@@ -1,6 +1,5 @@
-import type OpenAI from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
-import { createChatClient, getChatModel } from '../lib/llm.js';
+import { createChatCompletion, getChatModel } from '../lib/llm.js';
 import type { PixelTrailConfig } from '../config/config.js';
 import type { WorkingState } from '../memory/workingState.js';
 import type { RetrievedMemory } from '../memory/ledger.js';
@@ -20,11 +19,11 @@ export interface LLMResult {
 }
 
 export class AgentLLM {
-  private client: OpenAI;
+  private cfg: PixelTrailConfig;
   private model: string;
 
   constructor(cfg: PixelTrailConfig) {
-    this.client = createChatClient(cfg);
+    this.cfg = cfg;
     this.model = getChatModel(cfg);
   }
 
@@ -65,7 +64,7 @@ export class AgentLLM {
       { role: 'assistant', content: `Observations:\n${input.observations.join('\n') || '(none)'}` },
     ];
 
-    const completion = await this.client.chat.completions.create({
+    const completion = await createChatCompletion(this.cfg, {
       model: this.model,
       messages,
       max_tokens: maxTokens,
@@ -88,7 +87,7 @@ export class AgentLLM {
       { role: 'user', content: 'Summarize the upcoming events from these observations:' },
       { role: 'assistant', content: input.observations.join('\n') || '(none)' },
     ];
-    const completion = await this.client.chat.completions.create({
+    const completion = await createChatCompletion(this.cfg, {
       model: this.model,
       messages,
       max_tokens: maxTokens,
@@ -112,7 +111,7 @@ export class AgentLLM {
       { role: 'user', content: 'Summarize what you can infer from these observations, then ask one next-step question.' },
       { role: 'assistant', content: input.observations.join('\n') || '(none)' },
     ];
-    const completion = await this.client.chat.completions.create({
+    const completion = await createChatCompletion(this.cfg, {
       model: this.model,
       messages,
       max_tokens: maxTokens,
@@ -133,7 +132,7 @@ export class AgentLLM {
       { role: 'system', content: `Objective: ${input.objective}` },
       { role: 'user', content: `Turn this into a brief user update:\n${input.content}` },
     ];
-    const completion = await this.client.chat.completions.create({
+    const completion = await createChatCompletion(this.cfg, {
       model: this.model,
       messages,
       max_tokens: maxTokens,

@@ -4,6 +4,7 @@ import { decryptText, encryptText, generateSalt } from '../lib/crypto.js';
 
 export type SecretField =
   | 'openai.apiKey'
+  | 'anthropic.apiKey'
   | 'telegram.botToken'
   | 'google.clientSecret'
   | 'google.token'
@@ -12,6 +13,7 @@ export type SecretField =
   | 'n8n.basicPass';
 
 export interface PixelTrailConfig {
+  aiProvider?: 'openai' | 'anthropic';
   encryption: {
     salt: string;
     iterations?: number;
@@ -33,6 +35,13 @@ export interface PixelTrailConfig {
     model?: string;
     codeModel?: string;
     baseUrl?: string;
+  };
+  anthropic?: {
+    apiKeyEnc?: string;
+    model?: string;
+    baseUrl?: string;
+    version?: string;
+    maxTokens?: number;
   };
   telegram?: {
     botTokenEnc?: string;
@@ -91,9 +100,15 @@ const defaultConfig: PixelTrailConfig = {
     name: 'PixelTrail AI',
   },
   user: {},
+  aiProvider: 'openai',
   openai: {
     model: 'gpt-5-mini',
     codeModel: 'gpt-5.1-codex-mini',
+  },
+  anthropic: {
+    model: 'claude-3-7-sonnet-latest',
+    version: '2023-06-01',
+    maxTokens: 1024,
   },
   google: {
     scopes: [
@@ -160,6 +175,9 @@ export function loadConfig(): PixelTrailConfig {
   if (process.env.OPENAI_BASE_URL) {
     existing.openai = { ...(existing.openai ?? {}), baseUrl: process.env.OPENAI_BASE_URL };
   }
+  if (process.env.ANTHROPIC_BASE_URL) {
+    existing.anthropic = { ...(existing.anthropic ?? {}), baseUrl: process.env.ANTHROPIC_BASE_URL };
+  }
   // inject env overrides for clientId if provided
   if (process.env.GOOGLE_CLIENT_ID) {
     existing.google = { ...(existing.google ?? {}), clientId: process.env.GOOGLE_CLIENT_ID };
@@ -174,7 +192,9 @@ export function loadConfig(): PixelTrailConfig {
     encryption: { ...defaultConfig.encryption, ...(existing.encryption ?? {}) },
     assistant: { ...defaultConfig.assistant, ...(existing.assistant ?? {}) },
     user: { ...defaultConfig.user, ...(existing.user ?? {}) },
+    aiProvider: existing.aiProvider ?? defaultConfig.aiProvider,
     openai: { ...defaultConfig.openai, ...(existing.openai ?? {}) },
+    anthropic: { ...defaultConfig.anthropic, ...(existing.anthropic ?? {}) },
     telegram: { ...(existing.telegram ?? {}) },
     google: { ...defaultConfig.google, ...(existing.google ?? {}) },
     paths: { ...defaultConfig.paths, ...(existing.paths ?? {}) },
@@ -203,6 +223,8 @@ function envFallback(field: SecretField): string | undefined {
   switch (field) {
     case 'openai.apiKey':
       return process.env.OPENAI_API_KEY;
+    case 'anthropic.apiKey':
+      return process.env.ANTHROPIC_API_KEY;
     case 'telegram.botToken':
       return process.env.TELEGRAM_BOT_TOKEN;
     case 'google.clientSecret':
@@ -246,6 +268,7 @@ export function getSecret(cfg: PixelTrailConfig, field: SecretField): string {
 export function redacted(cfg: PixelTrailConfig) {
   const clone = JSON.parse(JSON.stringify(cfg)) as PixelTrailConfig;
   if (clone.openai?.apiKeyEnc) clone.openai.apiKeyEnc = '***';
+  if (clone.anthropic?.apiKeyEnc) clone.anthropic.apiKeyEnc = '***';
   if (clone.telegram?.botTokenEnc) clone.telegram.botTokenEnc = '***';
   if (clone.google?.clientSecretEnc) clone.google.clientSecretEnc = '***';
   if (clone.google?.tokenEnc) clone.google.tokenEnc = '***';

@@ -34,7 +34,32 @@ program
     const cfg = loadConfig();
     requireSecret();
     const answers = await prompts([
-      { type: cfg.openai?.apiKeyEnc ? null : 'password', name: 'openai', message: 'OpenAI API key' },
+      {
+        type: 'select',
+        name: 'provider',
+        message: 'AI provider',
+        choices: [
+          { title: 'OpenAI', value: 'openai' },
+          { title: 'Anthropic', value: 'anthropic' },
+        ],
+        initial: cfg.aiProvider === 'anthropic' ? 1 : 0,
+      },
+      {
+        type: (prev, values) => (values.provider === 'openai' && !cfg.openai?.apiKeyEnc ? 'password' : null),
+        name: 'openai',
+        message: 'OpenAI API key',
+      },
+      {
+        type: (prev, values) => (values.provider === 'anthropic' && !cfg.anthropic?.apiKeyEnc ? 'password' : null),
+        name: 'anthropic',
+        message: 'Anthropic API key',
+      },
+      {
+        type: (prev, values) => (values.provider === 'anthropic' ? 'text' : null),
+        name: 'anthropicModel',
+        message: 'Anthropic model',
+        initial: cfg.anthropic?.model ?? 'claude-3-7-sonnet-latest',
+      },
       { type: cfg.telegram?.botTokenEnc ? null : 'password', name: 'telegram', message: 'Telegram bot token' },
       { type: 'text', name: 'userName', message: 'Your name (optional)', initial: cfg.user?.name ?? '' },
       { type: 'text', name: 'userRole', message: 'Your role / job (optional)', initial: cfg.user?.role ?? '' },
@@ -49,7 +74,12 @@ program
     ]);
 
     let updated = { ...cfg };
+    if (answers.provider) updated.aiProvider = answers.provider;
     if (answers.openai) updated = setSecret(updated, 'openai.apiKey', answers.openai);
+    if (answers.anthropic) updated = setSecret(updated, 'anthropic.apiKey', answers.anthropic);
+    if (answers.anthropicModel) {
+      updated.anthropic = { ...(updated.anthropic ?? {}), model: String(answers.anthropicModel).trim() };
+    }
     if (answers.telegram) updated = setSecret(updated, 'telegram.botToken', answers.telegram);
     updated.user = {
       ...(updated.user ?? {}),
@@ -78,6 +108,52 @@ program
       logger.info('cli.run.debug_io enabled');
     }
     startTelegramBot({ debugIO: Boolean(options?.debugIo) });
+  });
+
+program
+  .command('ai-provider')
+  .description('Select the AI provider (openai or anthropic)')
+  .option('-p, --provider <name>', 'Provider name: openai|anthropic')
+  .action(async (options) => {
+    logAction('cli.ai_provider.start');
+    let cfg = loadConfig();
+    requireSecret();
+    const provider =
+      options.provider ||
+      (
+        await prompts({
+          type: 'select',
+          name: 'provider',
+          message: 'Select AI provider',
+          choices: [
+            { title: 'OpenAI', value: 'openai' },
+            { title: 'Anthropic', value: 'anthropic' },
+          ],
+          initial: cfg.aiProvider === 'anthropic' ? 1 : 0,
+        })
+      ).provider;
+    if (!provider) return;
+    if (provider === 'openai' && !cfg.openai?.apiKeyEnc && !process.env.OPENAI_API_KEY) {
+      const { openai } = await prompts({ type: 'password', name: 'openai', message: 'OpenAI API key' });
+      if (openai) cfg = setSecret(cfg, 'openai.apiKey', openai);
+    }
+    if (provider === 'anthropic' && !cfg.anthropic?.apiKeyEnc && !process.env.ANTHROPIC_API_KEY) {
+      const { anthropic } = await prompts({ type: 'password', name: 'anthropic', message: 'Anthropic API key' });
+      if (anthropic) cfg = setSecret(cfg, 'anthropic.apiKey', anthropic);
+    }
+    if (provider === 'anthropic') {
+      const { model } = await prompts({
+        type: 'text',
+        name: 'model',
+        message: 'Anthropic model (optional)',
+        initial: cfg.anthropic?.model ?? 'claude-3-7-sonnet-latest',
+      });
+      if (model) cfg = { ...cfg, anthropic: { ...(cfg.anthropic ?? {}), model: String(model).trim() } };
+    }
+    cfg.aiProvider = provider;
+    saveConfig(cfg);
+    logAction('cli.ai_provider.saved', { provider });
+    console.log(`AI provider set to ${provider}.`);
   });
 
 program
@@ -171,7 +247,7 @@ configCmd
     logAction('cli.config.get', { path: pathKey });
     const cfg = loadConfig();
     try {
-      if (pathKey === 'openai.apiKey' || pathKey === 'telegram.botToken') {
+      if (pathKey === 'openai.apiKey' || pathKey === 'anthropic.apiKey' || pathKey === 'telegram.botToken') {
         console.log(getSecret(cfg, pathKey as any));
         return;
       }
@@ -195,6 +271,7 @@ configCmd
     if (!value) throw new Error('Value required');
     if (
       pathKey === 'openai.apiKey' ||
+      pathKey === 'anthropic.apiKey' ||
       pathKey === 'telegram.botToken' ||
       pathKey === 'google.clientSecret' ||
       pathKey === 'google.token' ||
