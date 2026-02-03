@@ -339,7 +339,7 @@ export function startDashboard(options: DashboardOptions = {}) {
     const urls = listLanUrls(port);
     const local = `http://127.0.0.1:${port}`;
     const extra = urls.length ? `\nLAN: ${urls.join(' , ')}` : '';
-    console.log(`Sparrow dashboard running.\nLocal: ${local}${extra}`);
+    console.log(`PixelTrail AI dashboard running.\nLocal: ${local}${extra}`);
   });
 
   return server;

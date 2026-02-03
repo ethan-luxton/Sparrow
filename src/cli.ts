@@ -17,7 +17,7 @@ import { OpenAIClient } from './lib/openaiClient.js';
 import { startDashboard } from './dashboard/server.js';
 
 const program = new Command();
-program.name('sparrow').description('Local-only AI agent');
+program.name('pt').description('Local-only AI agent');
 
 function logAction(action: string, details?: Record<string, unknown>) {
   logger.info(`${action}${details ? ' ' + JSON.stringify(details) : ''}`);
@@ -25,7 +25,7 @@ function logAction(action: string, details?: Record<string, unknown>) {
 
 program
   .command('init')
-  .description('Interactive setup for Sparrow')
+  .description('Interactive setup for PixelTrail AI')
   .action(async () => {
     logAction('cli.init.start');
     const cfg = loadConfig();
@@ -61,7 +61,7 @@ program
     };
     saveConfig(updated);
     logAction('cli.init.saved');
-    console.log('Config saved to ~/.sparrow/config.json');
+    console.log('Config saved to ~/.pixeltrail/config.json');
   });
 
 program
@@ -71,7 +71,7 @@ program
   .action((options) => {
     logAction('cli.run.start');
     if (options?.debugIo) {
-      process.env.SPARROW_DEBUG_IO = '1';
+      process.env.PIXELTRAIL_DEBUG_IO = '1';
       logger.info('cli.run.debug_io enabled');
     }
     startTelegramBot({ debugIO: Boolean(options?.debugIo) });
@@ -79,7 +79,7 @@ program
 
 program
   .command('chat [message]')
-  .description('Chat with Sparrow via the CLI (interactive if no message).')
+  .description('Chat with PixelTrail AI via the CLI (interactive if no message).')
   .option('-i, --chat-id <id>', 'Chat id to use (default: -1)')
   .action(async (message, options) => {
     const chatId = Number.isFinite(Number(options.chatId)) ? Number(options.chatId) : -1;
@@ -110,7 +110,7 @@ program
     }
 
     const rl = readline.createInterface({ input, output });
-    console.log('Sparrow CLI chat. Type /exit to quit, /reset to clear history.');
+    console.log('PixelTrail AI CLI chat. Type /exit to quit, /reset to clear history.');
     while (true) {
       const line = (await rl.question('> ')).trim();
       if (!line) continue;
@@ -303,7 +303,7 @@ program
 
 program
   .command('dashboard')
-  .description('Start local Sparrow monitoring dashboard')
+  .description('Start local PixelTrail AI monitoring dashboard')
   .option('--host <host>', 'Host to bind (use 0.0.0.0 for LAN)', '0.0.0.0')
   .option('--port <port>', 'Port to listen on', '5527')
   .action((options) => {

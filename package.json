@@ -1,11 +1,11 @@
 {
-  "name": "sparrow",
+  "name": "pixeltrail",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "sparrow": "dist/cli.js"
+    "pt": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc && node scripts/copy-dashboard-assets.js",

@@ -7,8 +7,8 @@ import { gitTool } from '../git.js';
 import { ToolRegistry } from '../registry.js';
 
 test('git tool blocks force flags', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sparrow-ws-'));
-  process.env.SPARROW_WORKSPACE_ROOT = root;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pixeltrail-ws-'));
+  process.env.PIXELTRAIL_WORKSPACE_ROOT = root;
   try {
     const tool = gitTool();
     await assert.rejects(
@@ -19,13 +19,13 @@ test('git tool blocks force flags', async () => {
     );
   } finally {
     fs.removeSync(root);
-    delete process.env.SPARROW_WORKSPACE_ROOT;
+    delete process.env.PIXELTRAIL_WORKSPACE_ROOT;
   }
 });
 
 test('git commit requires approval', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sparrow-ws-'));
-  process.env.SPARROW_WORKSPACE_ROOT = root;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pixeltrail-ws-'));
+  process.env.PIXELTRAIL_WORKSPACE_ROOT = root;
   try {
     const registry = new ToolRegistry();
     registry.register(gitTool());
@@ -37,6 +37,6 @@ test('git commit requires approval', async () => {
     );
   } finally {
     fs.removeSync(root);
-    delete process.env.SPARROW_WORKSPACE_ROOT;
+    delete process.env.PIXELTRAIL_WORKSPACE_ROOT;
   }
 });

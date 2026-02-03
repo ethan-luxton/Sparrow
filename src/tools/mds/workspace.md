@@ -1,6 +1,6 @@
 # workspace
 ## Purpose
-Operate on files inside the local workspace root at ~/sparrow-projects with strict sandboxing.
+Operate on files inside the local workspace root at ~/pixeltrail-projects with strict sandboxing.
 
 ## When to use
 - Create or open a project folder
@@ -10,7 +10,7 @@ Operate on files inside the local workspace root at ~/sparrow-projects with stri
 
 ## Inputs
 - action: ensure_workspace | list_projects | ensure_project | read_file | write_file | apply_patch | list_files | search
-- project: project name under ~/sparrow-projects
+- project: project name under ~/pixeltrail-projects
 - path: relative file path inside the project
 - content: file content for write_file
 - diff: unified diff string for apply_patch
@@ -20,9 +20,9 @@ Operate on files inside the local workspace root at ~/sparrow-projects with stri
 - maxResults: optional search cap
 
 Example
-- action=ensure_project, project="sparrow-telegram"
-- action=write_file, project="sparrow-telegram", path="src/index.ts", content="..."
-- action=search, project="sparrow-telegram", query="TODO", maxResults=50
+- action=ensure_project, project="pixeltrail-telegram"
+- action=write_file, project="pixeltrail-telegram", path="src/index.ts", content="..."
+- action=search, project="pixeltrail-telegram", query="TODO", maxResults=50
 
 ## Outputs
 - ensure_workspace: { root }
@@ -35,7 +35,7 @@ Example
 - search: string (redacted)
 
 ## Safety and constraints
-- Only paths under ~/sparrow-projects are allowed
+- Only paths under ~/pixeltrail-projects are allowed
 - Path traversal and symlink escape are blocked
 - Files have size limits for read and write
 - Output is redacted for common secret patterns

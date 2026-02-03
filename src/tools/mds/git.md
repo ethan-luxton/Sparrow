@@ -10,7 +10,7 @@ Run allowlisted git commands within a workspace project directory.
 
 ## Inputs
 - action: status | log | diff | show | branch_list | branch_create | checkout | switch | fetch | pull | push | add | commit | stash | restore | reset | merge | rebase | tag | init | config_list
-- project: project name under ~/sparrow-projects
+- project: project name under ~/pixeltrail-projects
 - message: commit message for commit
 - paths: optional file paths for add or restore
 - staged: boolean for diff
@@ -22,16 +22,16 @@ Run allowlisted git commands within a workspace project directory.
 - confirm: required for Tier2 actions
 
 Example
-- action=init, project="sparrow-telegram" (defaults to main)
-- action=status, project="sparrow-telegram"
-- action=add, project="sparrow-telegram", paths=["src/index.ts"]
-- action=commit, project="sparrow-telegram", message="Initial scaffold", confirm=true
+- action=init, project="pixeltrail-telegram" (defaults to main)
+- action=status, project="pixeltrail-telegram"
+- action=add, project="pixeltrail-telegram", paths=["src/index.ts"]
+- action=commit, project="pixeltrail-telegram", message="Initial scaffold", confirm=true
 
 ## Outputs
 - { exitCode, summary, stdout, stderr }
 
 ## Safety and constraints
-- Runs only inside ~/sparrow-projects/<project>
+- Runs only inside ~/pixeltrail-projects/<project>
 - Force, hard reset, and destructive flags are blocked
 - Tier2 actions require approval
 

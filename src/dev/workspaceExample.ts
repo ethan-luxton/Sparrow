@@ -6,19 +6,19 @@ export async function runWorkspaceExample() {
   const tools = buildToolRegistry(cfg);
 
   await tools.run('workspace', { action: 'ensure_workspace' }, 0);
-  await tools.run('workspace', { action: 'ensure_project', project: 'sparrow-telegram' }, 0);
-  await tools.run('git', { action: 'init', project: 'sparrow-telegram' }, 0);
+  await tools.run('workspace', { action: 'ensure_project', project: 'pixeltrail-telegram' }, 0);
+  await tools.run('git', { action: 'init', project: 'pixeltrail-telegram' }, 0);
   await tools.run(
     'workspace',
     {
       action: 'write_file',
-      project: 'sparrow-telegram',
+      project: 'pixeltrail-telegram',
       path: 'README.md',
-      content: '# sparrow-telegram\n\nInitial scaffold.',
+      content: '# pixeltrail-telegram\n\nInitial scaffold.',
     },
     0
   );
-  await tools.run('git', { action: 'status', project: 'sparrow-telegram' }, 0);
-  await tools.run('git', { action: 'add', project: 'sparrow-telegram', paths: ['README.md'] }, 0);
+  await tools.run('git', { action: 'status', project: 'pixeltrail-telegram' }, 0);
+  await tools.run('git', { action: 'add', project: 'pixeltrail-telegram', paths: ['README.md'] }, 0);
   // commit requires confirm=true and user approval
 }

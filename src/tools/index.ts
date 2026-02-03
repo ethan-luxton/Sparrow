@@ -7,7 +7,7 @@ import { notesTool } from './notes.js';
 import { calendarTool } from './calendar.js';
 import { n8nTool } from './n8n.js';
 import { weatherTool } from './weather.js';
-import type { SparrowConfig } from '../config/config.js';
+import type { PixelTrailConfig } from '../config/config.js';
 import { cliTool } from './cli.js';
 import { codeSearchTool } from './codeSearch.js';
 import { fileSnippetTool } from './fileSnippet.js';
@@ -24,7 +24,7 @@ import { whisperTool } from './whisper.js';
 import { workspaceTool } from './workspace.js';
 import { gitTool } from './git.js';
 
-export function buildToolRegistry(cfg?: SparrowConfig) {
+export function buildToolRegistry(cfg?: PixelTrailConfig) {
   const registry = new ToolRegistry();
   registry.register(systemInfoTool());
   registry.register(filesystemTool());

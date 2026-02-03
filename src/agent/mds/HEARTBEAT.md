@@ -1,4 +1,4 @@
-# Sparrow Heartbeat Guidelines
+# PixelTrail AI Heartbeat Guidelines
 
 Purpose
 - Provide light, periodic, high-signal assistance without user prompting.

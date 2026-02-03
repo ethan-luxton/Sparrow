@@ -1,10 +1,10 @@
 import { google } from 'googleapis';
-import { SparrowConfig, getSecret, saveConfig, setSecret } from '../config/config.js';
+import { PixelTrailConfig, getSecret, saveConfig, setSecret } from '../config/config.js';
 import { logger } from '../lib/logger.js';
 
-export function buildOAuthClient(cfg: SparrowConfig) {
+export function buildOAuthClient(cfg: PixelTrailConfig) {
   const clientId = cfg.google?.clientId;
-  if (!clientId) throw new Error('Google clientId missing. Run `sparrow google auth`.');
+  if (!clientId) throw new Error('Google clientId missing. Run `pt google-auth`.');
   const clientSecret = getSecret(cfg, 'google.clientSecret');
   const redirectUri = cfg.google?.redirectUri ?? 'urn:ietf:wg:oauth:2.0:oob';
   const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);

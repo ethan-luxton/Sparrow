@@ -3,11 +3,11 @@ import path from 'node:path';
 import os from 'node:os';
 import { redactSensitiveText } from './redaction.js';
 
-const DEFAULT_ROOT = path.join(os.homedir(), 'sparrow-projects');
+const DEFAULT_ROOT = path.join(os.homedir(), 'pixeltrail-projects');
 const PROJECT_NAME_RE = /^[a-zA-Z0-9._-]+$/;
 
 export function getWorkspaceRoot(): string {
-  const env = process.env.SPARROW_WORKSPACE_ROOT;
+  const env = process.env.PIXELTRAIL_WORKSPACE_ROOT;
   return env && env.trim().length > 0 ? env.trim() : DEFAULT_ROOT;
 }
 

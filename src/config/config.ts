@@ -11,7 +11,7 @@ export type SecretField =
   | 'n8n.basicUser'
   | 'n8n.basicPass';
 
-export interface SparrowConfig {
+export interface PixelTrailConfig {
   encryption: {
     salt: string;
     iterations?: number;
@@ -81,12 +81,12 @@ export interface SparrowConfig {
   };
 }
 
-const defaultConfig: SparrowConfig = {
+const defaultConfig: PixelTrailConfig = {
   encryption: {
     salt: generateSalt(),
   },
   assistant: {
-    name: 'Sparrow',
+    name: 'PixelTrail AI',
   },
   user: {},
   openai: {
@@ -135,13 +135,13 @@ function ensureDirs() {
   fs.ensureDirSync(sandboxDir);
 }
 
-export function loadConfig(): SparrowConfig {
+export function loadConfig(): PixelTrailConfig {
   ensureDirs();
   if (!fs.existsSync(configPath)) {
     fs.writeJSONSync(configPath, defaultConfig, { spaces: 2 });
     return { ...defaultConfig };
   }
-  const existing = fs.readJSONSync(configPath) as SparrowConfig;
+  const existing = fs.readJSONSync(configPath) as PixelTrailConfig;
 
   // Normalize legacy model names: force everything to gpt-5-mini
   const normalizeModel = (model?: string) => {
@@ -180,18 +180,18 @@ export function loadConfig(): SparrowConfig {
   };
 }
 
-export function saveConfig(cfg: SparrowConfig) {
+export function saveConfig(cfg: PixelTrailConfig) {
   ensureDirs();
   fs.writeJSONSync(configPath, cfg, { spaces: 2 });
 }
 
 export function requireSecret(): string {
-  const secret = process.env.SPARROW_SECRET;
-  if (!secret) throw new Error('SPARROW_SECRET environment variable is required to encrypt/decrypt secrets.');
+  const secret = process.env.PIXELTRAIL_SECRET;
+  if (!secret) throw new Error('PIXELTRAIL_SECRET environment variable is required to encrypt/decrypt secrets.');
   return secret;
 }
 
-function resolveCtx(cfg: SparrowConfig) {
+function resolveCtx(cfg: PixelTrailConfig) {
   return { salt: cfg.encryption.salt, iterations: cfg.encryption.iterations };
 }
 
@@ -217,30 +217,30 @@ function envFallback(field: SecretField): string | undefined {
   }
 }
 
-export function setSecret(cfg: SparrowConfig, field: SecretField, value: string): SparrowConfig {
+export function setSecret(cfg: PixelTrailConfig, field: SecretField, value: string): PixelTrailConfig {
   const secret = requireSecret();
   const ctx = resolveCtx(cfg);
   const enc = encryptText(value, secret, ctx);
-  const clone: SparrowConfig = { ...cfg };
-  const [group, key] = field.split('.') as [keyof SparrowConfig, string];
+  const clone: PixelTrailConfig = { ...cfg };
+  const [group, key] = field.split('.') as [keyof PixelTrailConfig, string];
   clone[group] = { ...(clone[group] as Record<string, unknown>), [`${key}Enc`]: enc } as any;
   return clone;
 }
 
-export function getSecret(cfg: SparrowConfig, field: SecretField): string {
+export function getSecret(cfg: PixelTrailConfig, field: SecretField): string {
   const env = envFallback(field);
   if (env) return env;
   const secret = requireSecret();
   const ctx = resolveCtx(cfg);
-  const [group, key] = field.split('.') as [keyof SparrowConfig, string];
+  const [group, key] = field.split('.') as [keyof PixelTrailConfig, string];
   const groupObj = cfg[group] as Record<string, unknown> | undefined;
   const enc = groupObj?.[`${key}Enc`];
   if (!enc || typeof enc !== 'string') throw new Error(`Secret ${field} not configured`);
   return decryptText(enc, secret, ctx);
 }
 
-export function redacted(cfg: SparrowConfig) {
-  const clone = JSON.parse(JSON.stringify(cfg)) as SparrowConfig;
+export function redacted(cfg: PixelTrailConfig) {
+  const clone = JSON.parse(JSON.stringify(cfg)) as PixelTrailConfig;
   if (clone.openai?.apiKeyEnc) clone.openai.apiKeyEnc = '***';
   if (clone.telegram?.botTokenEnc) clone.telegram.botTokenEnc = '***';
   if (clone.google?.clientSecretEnc) clone.google.clientSecretEnc = '***';

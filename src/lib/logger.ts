@@ -7,7 +7,7 @@ fs.ensureDirSync(logsDir);
 
 const transport = new DailyRotateFile({
   dirname: logsDir,
-  filename: 'sparrow-%DATE%.log',
+  filename: 'pixeltrail-%DATE%.log',
   datePattern: 'YYYY-MM-DD',
   maxFiles: '14d',
   zippedArchive: false,

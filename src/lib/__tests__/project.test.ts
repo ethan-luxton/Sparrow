@@ -8,6 +8,6 @@ test('default project name is deterministic', () => {
 });
 
 test('infer project name from message', () => {
-  const name = inferProjectName('Create a project called sparrow-telegram for a bot');
-  assert.equal(name, 'sparrow-telegram');
+  const name = inferProjectName('Create a project called pixeltrail-telegram for a bot');
+  assert.equal(name, 'pixeltrail-telegram');
 });

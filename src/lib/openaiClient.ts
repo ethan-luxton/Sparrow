@@ -1,6 +1,6 @@
 import { SYSTEM_PROMPT } from './prompt.js';
 import { addMessage, getDbHandle, getUserProfile } from './db.js';
-import { SparrowConfig } from '../config/config.js';
+import { PixelTrailConfig } from '../config/config.js';
 import { logger } from './logger.js';
 import { ToolRegistry } from '../tools/registry.js';
 import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions';
@@ -115,9 +115,9 @@ function parseGitSequence(text: string): { commitMessage?: string; branch?: stri
 
 export class OpenAIClient {
   private client: OpenAI;
-  private cfg: SparrowConfig;
+  private cfg: PixelTrailConfig;
 
-  constructor(cfg: SparrowConfig) {
+  constructor(cfg: PixelTrailConfig) {
     this.client = createChatClient(cfg);
     this.cfg = cfg;
   }
@@ -129,7 +129,7 @@ export class OpenAIClient {
     const assistant = this.cfg.assistant;
     const user = this.cfg.user;
     const model = getChatModel(this.cfg);
-    const debugIO = process.env.SPARROW_DEBUG_IO === '1';
+    const debugIO = process.env.PIXELTRAIL_DEBUG_IO === '1';
     const working = getWorkingState(chatId, db);
     const inferredProject = inferProjectName(userText) ?? (working.currentProject || defaultProjectName());
 
@@ -229,7 +229,7 @@ export class OpenAIClient {
       'CLI tool is read-only; no writes, sudo, kills, or installs',
       'Ask at most one question only if needed',
       'Tier2 actions require user approval before running',
-      'Use workspace for all file reads and writes in ~/sparrow-projects',
+      'Use workspace for all file reads and writes in ~/pixeltrail-projects',
       'Use git tool for repository actions inside workspace projects only',
     ];
     if (assistant?.name) constraintBase.push(`Assistant name: ${assistant.name}`);
@@ -320,10 +320,10 @@ CLI tool notes:
 - Use action=run with a commands array for multi-step tasks.
 - Allowed operators: pipe (|), &&, and one fallback (cmd1 || cmd2). Avoid ;, >, < (except /dev/null).
 - Redirects are only allowed to /dev/null (e.g., 2>/dev/null).
-- Prefer separate commands (e.g., "cd ~/projects", "ls -1", "git -C ~/projects/sparrow status").
+- Prefer separate commands (e.g., "cd ~/projects", "ls -1", "git -C ~/projects/pixeltrail status").
 - You can use action=start to create a session and reuse sessionId across calls to preserve cwd.
 - For tools that require confirm=true on Tier2 actions (calendar/drive/n8n/filesystem/task_runner/git), only set confirm=true after the user approves.
-- Use workspace for all file reads and writes in ~/sparrow-projects. Use git for repository operations in workspace projects.
+- Use workspace for all file reads and writes in ~/pixeltrail-projects. Use git for repository operations in workspace projects.
 - Never search for or reveal secrets (API keys/tokens/passwords/private keys) or their locations.
 `,
       });
@@ -344,7 +344,7 @@ CLI tool notes:
         request.tools = toolDefs;
         request.tool_choice = 'auto';
       }
-      const timeoutMs = Number(process.env.SPARROW_MODEL_TIMEOUT_MS ?? 120000);
+      const timeoutMs = Number(process.env.PIXELTRAIL_MODEL_TIMEOUT_MS ?? 120000);
       const baseUrl = this.cfg.openai?.baseUrl ?? process.env.OPENAI_BASE_URL ?? 'https://api.openai.com';
       logger.info(`outbound.openai chatId=${chatId} model=${model} baseUrl=${baseUrl}`);
       const completion = await withTimeout(this.client.chat.completions.create(request), timeoutMs);

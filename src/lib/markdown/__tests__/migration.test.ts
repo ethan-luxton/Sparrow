@@ -6,7 +6,7 @@ import path from 'node:path';
 import { migrateWorkspaceDocs } from '../migration.js';
 
 function makeTempDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'sparrow-migrate-'));
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'pixeltrail-migrate-'));
 }
 
 test('migration helper creates new docs and copies legacy content', () => {
@@ -19,7 +19,7 @@ test('migration helper creates new docs and copies legacy content', () => {
 
   const prevCwd = process.cwd();
   process.chdir(root);
-  process.env.SPARROW_AGENT_MDS_DIR = agentDir;
+  process.env.PIXELTRAIL_AGENT_MDS_DIR = agentDir;
   try {
     migrateWorkspaceDocs();
     const soul = fs.readFileSync(path.join(agentDir, 'SOUL.md'), 'utf8');
@@ -30,6 +30,6 @@ test('migration helper creates new docs and copies legacy content', () => {
     assert.ok(hb.includes('legacy heartbeat'));
   } finally {
     process.chdir(prevCwd);
-    delete process.env.SPARROW_AGENT_MDS_DIR;
+    delete process.env.PIXELTRAIL_AGENT_MDS_DIR;
   }
 });

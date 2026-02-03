@@ -6,13 +6,13 @@ import os from 'node:os';
 import { workspaceTool } from '../workspace.js';
 
 function withTempWorkspace<T>(fn: (root: string) => Promise<T> | T) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sparrow-ws-'));
-  process.env.SPARROW_WORKSPACE_ROOT = root;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pixeltrail-ws-'));
+  process.env.PIXELTRAIL_WORKSPACE_ROOT = root;
   try {
     return fn(root);
   } finally {
     fs.removeSync(root);
-    delete process.env.SPARROW_WORKSPACE_ROOT;
+    delete process.env.PIXELTRAIL_WORKSPACE_ROOT;
   }
 }
 
@@ -34,8 +34,8 @@ test('workspace blocks symlink escape', async () => {
   await withTempWorkspace(async () => {
     const tool = workspaceTool();
     await tool.handler({ action: 'ensure_project', project: 'beta' }, 0);
-    const projectDir = path.join(process.env.SPARROW_WORKSPACE_ROOT as string, 'beta');
-    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sparrow-out-'));
+    const projectDir = path.join(process.env.PIXELTRAIL_WORKSPACE_ROOT as string, 'beta');
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pixeltrail-out-'));
     const outsideFile = path.join(outsideDir, 'secret.txt');
     await fs.writeFile(outsideFile, 'secret', 'utf8');
     const linkPath = path.join(projectDir, 'link');
