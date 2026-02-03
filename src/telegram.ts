@@ -34,14 +34,14 @@ function numberFromEnv(value?: string): number | undefined {
 
 function buildTelegramOptions() {
   const pollingIntervalMs = numberFromEnv(
-    process.env.SPARROW_TELEGRAM_POLLING_INTERVAL_MS ?? process.env.TELEGRAM_POLLING_INTERVAL_MS
+    process.env.PIXELTRAIL_TELEGRAM_POLLING_INTERVAL_MS ?? process.env.TELEGRAM_POLLING_INTERVAL_MS
   );
   const pollingTimeoutSec = numberFromEnv(
-    process.env.SPARROW_TELEGRAM_POLLING_TIMEOUT_SEC ?? process.env.TELEGRAM_POLLING_TIMEOUT_SEC
+    process.env.PIXELTRAIL_TELEGRAM_POLLING_TIMEOUT_SEC ?? process.env.TELEGRAM_POLLING_TIMEOUT_SEC
   );
-  const proxyUrl = process.env.SPARROW_TELEGRAM_PROXY_URL ?? process.env.TELEGRAM_PROXY_URL;
+  const proxyUrl = process.env.PIXELTRAIL_TELEGRAM_PROXY_URL ?? process.env.TELEGRAM_PROXY_URL;
   const ipv4Only =
-    boolFromEnv(process.env.SPARROW_TELEGRAM_IPV4_ONLY ?? process.env.TELEGRAM_IPV4_ONLY) ??
+    boolFromEnv(process.env.PIXELTRAIL_TELEGRAM_IPV4_ONLY ?? process.env.TELEGRAM_IPV4_ONLY) ??
     (process.platform === 'linux');
 
   const options: any = { polling: true };
@@ -151,12 +151,12 @@ export function startTelegramBot(opts?: { debugIO?: boolean }) {
   });
   startHeartbeat(bot, cfg, { queue });
   if (opts?.debugIO) {
-    process.env.SPARROW_DEBUG_IO = '1';
+    process.env.PIXELTRAIL_DEBUG_IO = '1';
   }
   logger.info(`Telegram options: ${JSON.stringify(diagnostics)}`);
 
   bot.onText(/^\/start/, (msg) => {
-    bot.sendMessage(msg.chat.id, 'Sparrow ready. Send a message or /help for options.');
+    bot.sendMessage(msg.chat.id, 'PixelTrail AI ready. Send a message or /help for options.');
   });
 
   bot.onText(/^\/help/, (msg) => {
@@ -260,7 +260,7 @@ export function startTelegramBot(opts?: { debugIO?: boolean }) {
                 encoding: 'base64',
                 confirm: true,
               }, chatId);
-              await bot.sendMessage(chatId, 'Saved the transcript and audio under ~/.sparrow.');
+              await bot.sendMessage(chatId, 'Saved the transcript and audio under ~/.pixeltrail.');
             } else {
               await bot.sendMessage(chatId, 'Got it, I will not save them.');
             }

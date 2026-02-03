@@ -1,9 +1,9 @@
 import prompts from 'prompts';
 import { google } from 'googleapis';
-import { SparrowConfig, saveConfig, setSecret } from '../config/config.js';
+import { PixelTrailConfig, saveConfig, setSecret } from '../config/config.js';
 import { logger } from '../lib/logger.js';
 
-export async function runGoogleAuth(cfg: SparrowConfig) {
+export async function runGoogleAuth(cfg: PixelTrailConfig) {
   const responses = await prompts(
     [
       {
@@ -33,7 +33,7 @@ export async function runGoogleAuth(cfg: SparrowConfig) {
   const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
   const authUrl = oauth2Client.generateAuthUrl({ access_type: 'offline', scope: scopes, prompt: 'consent' });
 
-  console.log('\nOpen this URL in your browser to authorize Sparrow:');
+  console.log('\nOpen this URL in your browser to authorize PixelTrail AI:');
   console.log(authUrl);
 
   const { code } = await prompts({ type: 'text', name: 'code', message: 'Paste the authorization code' });
@@ -43,7 +43,7 @@ export async function runGoogleAuth(cfg: SparrowConfig) {
   logger.info('Received Google tokens.');
 
   const googleBlock = { ...(cfg.google ?? {}), clientId, tokenEnc: undefined };
-  let updated: SparrowConfig = { ...cfg, google: googleBlock };
+  let updated: PixelTrailConfig = { ...cfg, google: googleBlock };
   updated = setSecret(updated, 'google.clientSecret', clientSecret);
   updated = setSecret(updated, 'google.token', JSON.stringify(tokens));
   saveConfig(updated);

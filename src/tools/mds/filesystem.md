@@ -1,14 +1,14 @@
 # filesystem
 ## Purpose
-Safe local file access restricted to ~/.sparrow only.
+Safe local file access restricted to ~/.pixeltrail only.
 
 ## When to use
-- Read or list files under ~/.sparrow
-- Write files under ~/.sparrow when explicitly requested
+- Read or list files under ~/.pixeltrail
+- Write files under ~/.pixeltrail when explicitly requested
 
 ## Inputs
 - action: read | write | list | read_pdf_text | read_docx_text | write_pdf | write_binary
-- path: path under ~/.sparrow
+- path: path under ~/.pixeltrail
 - content: required for write/write_pdf/write_binary
 - encoding: base64 (required for write_binary)
 
@@ -23,7 +23,7 @@ Example
 - write: "written"
 
 ## Safety and constraints
-- Restricted to ~/.sparrow base directory
+- Restricted to ~/.pixeltrail base directory
 - Write actions require confirm=true
 
 ## Common patterns

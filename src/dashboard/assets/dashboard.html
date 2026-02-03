@@ -3,13 +3,13 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Sparrow Monitor</title>
+    <title>PixelTrail AI Monitor</title>
     <link rel="stylesheet" href="/assets/dashboard.css" />
   </head>
   <body>
     <header>
-      <div class="title">Sparrow Monitor</div>
-      <div class="subtitle" id="subtitle">Live snapshot of Sparrow on this host.</div>
+      <div class="title">PixelTrail AI Monitor</div>
+      <div class="subtitle" id="subtitle">Live snapshot of PixelTrail AI on this host.</div>
     </header>
     <div class="sections">
       <section class="section">
@@ -58,7 +58,7 @@
             <div class="chat">
               <div class="chat-messages" id="chat-messages"></div>
               <div class="chat-input">
-                <input id="chat-input" placeholder="Message Sparrow…" />
+                <input id="chat-input" placeholder="Message PixelTrail AI…" />
                 <button id="chat-send">Send</button>
               </div>
             </div>
@@ -227,7 +227,7 @@
           const logs = await fetchJson("/api/logs?lines=160");
           renderLogs(logs.lines || [], logs.file || "logs");
         } catch (err) {
-          setText("subtitle", "Waiting for Sparrow data...");
+          setText("subtitle", "Waiting for PixelTrail AI data...");
         }
       }
       refresh();

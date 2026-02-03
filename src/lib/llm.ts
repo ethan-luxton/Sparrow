@@ -1,28 +1,28 @@
 import OpenAI from 'openai';
-import { SparrowConfig, getSecret } from '../config/config.js';
+import { PixelTrailConfig, getSecret } from '../config/config.js';
 
-export function getChatModel(cfg: SparrowConfig): string {
+export function getChatModel(cfg: PixelTrailConfig): string {
   return cfg.openai?.model ?? process.env.OPENAI_MODEL ?? 'gpt-5-mini';
 }
 
-export function getCodingModel(cfg: SparrowConfig): string {
+export function getCodingModel(cfg: PixelTrailConfig): string {
   return cfg.openai?.codeModel ?? process.env.OPENAI_CODE_MODEL ?? 'gpt-5.1-codex-mini';
 }
 
-export function supportsTools(cfg: SparrowConfig): boolean {
+export function supportsTools(cfg: PixelTrailConfig): boolean {
   return true;
 }
 
-export function supportsWebSearch(cfg: SparrowConfig): boolean {
+export function supportsWebSearch(cfg: PixelTrailConfig): boolean {
   return true;
 }
 
-export function createChatClient(cfg: SparrowConfig): OpenAI {
+export function createChatClient(cfg: PixelTrailConfig): OpenAI {
   const apiKey = getSecret(cfg, 'openai.apiKey');
   const baseURL = cfg.openai?.baseUrl ?? process.env.OPENAI_BASE_URL;
   return new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
 }
 
-export function createCodingClient(cfg: SparrowConfig): OpenAI {
+export function createCodingClient(cfg: PixelTrailConfig): OpenAI {
   return createChatClient(cfg);
 }

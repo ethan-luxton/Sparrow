@@ -17,11 +17,11 @@ function numberFromEnv(value: string | undefined, fallback: number) {
 
 export function getMarkdownConfig(): MarkdownConfig {
   return {
-    agentDir: process.env.SPARROW_AGENT_MDS_DIR ?? path.resolve(process.cwd(), 'src', 'agent', 'mds'),
-    toolsDir: process.env.SPARROW_TOOL_MDS_DIR ?? path.resolve(process.cwd(), 'src', 'tools', 'mds'),
-    perFileMaxChars: numberFromEnv(process.env.SPARROW_MD_PER_FILE_MAX_CHARS, 4000),
-    totalMaxChars: numberFromEnv(process.env.SPARROW_MD_TOTAL_MAX_CHARS, 14000),
-    toolDocsMaxChars: numberFromEnv(process.env.SPARROW_MD_TOOL_MAX_CHARS, 3000),
-    recentToolLimit: numberFromEnv(process.env.SPARROW_MD_RECENT_TOOL_LIMIT, 4),
+    agentDir: process.env.PIXELTRAIL_AGENT_MDS_DIR ?? path.resolve(process.cwd(), 'src', 'agent', 'mds'),
+    toolsDir: process.env.PIXELTRAIL_TOOL_MDS_DIR ?? path.resolve(process.cwd(), 'src', 'tools', 'mds'),
+    perFileMaxChars: numberFromEnv(process.env.PIXELTRAIL_MD_PER_FILE_MAX_CHARS, 4000),
+    totalMaxChars: numberFromEnv(process.env.PIXELTRAIL_MD_TOTAL_MAX_CHARS, 14000),
+    toolDocsMaxChars: numberFromEnv(process.env.PIXELTRAIL_MD_TOOL_MAX_CHARS, 3000),
+    recentToolLimit: numberFromEnv(process.env.PIXELTRAIL_MD_RECENT_TOOL_LIMIT, 4),
   };
 }

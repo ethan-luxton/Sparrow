@@ -7,7 +7,7 @@ import { injectMarkdown, resolveToolMdPath } from '../injector.js';
 import type { ToolDefinition } from '../../../tools/registry.js';
 
 function makeTempDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'sparrow-md-'));
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'pixeltrail-md-'));
 }
 
 test('injector ordering and determinism', () => {

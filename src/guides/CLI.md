@@ -1,4 +1,4 @@
-Sparrow CLI Tool Guide
+PixelTrail AI CLI Tool Guide
 
 Purpose
 - Use the cli tool for safe, read‑only shell commands inside a sandbox.
@@ -12,11 +12,11 @@ Quick Patterns
 
 2) Multi‑step without session (simple chains)
    - action: run
-   - commands: ["ls -1 ~/projects", "rg -n \"TODO\" ~/projects/sparrow/README.md"]
+   - commands: ["ls -1 ~/projects", "rg -n \"TODO\" ~/projects/pixeltrail/README.md"]
 
 3) Multi‑step with session (when you need cd)
    - action: start, cwd: "/home/ethan"
-   - action: run, sessionId: "<id>", commands: ["cd projects/sparrow", "git status", "rg -n \"cli\" src"]
+   - action: run, sessionId: "<id>", commands: ["cd projects/pixeltrail", "git status", "rg -n \"cli\" src"]
    - action: end, sessionId: "<id>" (optional but nice)
 
 4) Simple pipeline or fallback
@@ -38,24 +38,24 @@ Safety Rules (hard limits)
 - Redirect only to /dev/null is allowed (e.g., 2>/dev/null, >/dev/null).
 - Disallowed: ;, >, < (except /dev/null), `, $, and other shell metacharacters.
 - No write/modify commands (rm, mv, cp, chmod, chown, dd, mkfs, mount, tee, touch)
-- Paths must stay inside either the current working directory or ~/.sparrow
+- Paths must stay inside either the current working directory or ~/.pixeltrail
 - Output capped to 12KB, timeout 5s per command
 - Max commands per tool call: 20
 
 Git Tips
 - Use `git -C <path> <subcommand>` instead of `cd` when possible
-- Allowed: `git -C ~/projects/sparrow status`
+- Allowed: `git -C ~/projects/pixeltrail status`
 - Not allowed: `git -C <path> checkout`, `git reset`, `git commit`
 
 Examples
 - “What’s in my projects folder?”
   commands: ["ls -1 ~/projects"]
 
-- “Show modified files in sparrow”
-  commands: ["git -C ~/projects/sparrow status --porcelain"]
+- “Show modified files in pixeltrail”
+  commands: ["git -C ~/projects/pixeltrail status --porcelain"]
 
 - “Find TODOs in this repo”
-  commands: ["rg -n \"TODO\" ~/projects/sparrow"]
+  commands: ["rg -n \"TODO\" ~/projects/pixeltrail"]
 
 - “List git repos under ~/projects (depth 2)”
   commands: ["find ~/projects -maxdepth 2 -type d -name .git -print"]

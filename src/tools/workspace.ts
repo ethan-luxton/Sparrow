@@ -85,7 +85,7 @@ function runSearch(cmd: string, args: string[], cwd: string): Promise<{ stdout: 
 export function workspaceTool(): ToolDefinition {
   return {
     name: 'workspace',
-    description: 'Read and write files inside ~/sparrow-projects with strict sandboxing.',
+    description: 'Read and write files inside ~/pixeltrail-projects with strict sandboxing.',
     permission: 'write',
     schema: {
       type: 'object',

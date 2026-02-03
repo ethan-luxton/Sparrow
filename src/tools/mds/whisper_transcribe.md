@@ -13,7 +13,7 @@ Transcribe a local audio file with OpenAI Whisper.
 - prompt: optional context to improve transcription
 
 Example
-- action=transcribe, path="/home/USER/.sparrow/audio/clip.ogg", language="en"
+- action=transcribe, path="/home/USER/.pixeltrail/audio/clip.ogg", language="en"
 
 ## Outputs
 - { text } transcription string

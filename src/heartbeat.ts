@@ -2,7 +2,7 @@ import fs from 'fs-extra';
 import path from 'node:path';
 import TelegramBot from 'node-telegram-bot-api';
 import type OpenAI from 'openai';
-import { SparrowConfig } from './config/config.js';
+import { PixelTrailConfig } from './config/config.js';
 import { getLastMessageTimestamp, getLastCheckin, setLastCheckin, listChats, getMessages, getUserProfile, setUserProfile } from './lib/db.js';
 import { logger } from './lib/logger.js';
 import { createChatClient, getChatModel } from './lib/llm.js';
@@ -53,7 +53,7 @@ function parseTime(input: string) {
   return { hour, minute };
 }
 
-function isWithinActiveHours(cfg: SparrowConfig) {
+function isWithinActiveHours(cfg: PixelTrailConfig) {
   const window = cfg.bot?.heartbeatActiveHours;
   if (!window?.start || !window?.end) return true;
   const start = parseTime(window.start);
@@ -86,7 +86,7 @@ async function runHeartbeatForChat(
   chatId: number,
   bot: TelegramBot,
   client: OpenAI,
-  cfg: SparrowConfig,
+  cfg: PixelTrailConfig,
   guide: { path: string; content: string } | null,
   intervalMs: number,
   maxTokens: number,
@@ -126,7 +126,7 @@ async function runHeartbeatForChat(
         {
           role: 'system',
           content:
-            'You are Sparrow heartbeat. Be proactive but avoid noise. If nothing needs attention, reply HEARTBEAT_OK.',
+            'You are PixelTrail AI heartbeat. Be proactive but avoid noise. If nothing needs attention, reply HEARTBEAT_OK.',
         },
         { role: 'system', content: `Heartbeat prompt:\n${prompt}` },
         ...(guide ? ([{ role: 'system', content: `HEARTBEAT.md:\n${guide.content}` }] as any) : []),
@@ -170,7 +170,7 @@ async function runHeartbeatForChat(
   }
 }
 
-export function startHeartbeat(bot: TelegramBot, cfg: SparrowConfig, opts?: { queue?: ChatQueue }) {
+export function startHeartbeat(bot: TelegramBot, cfg: PixelTrailConfig, opts?: { queue?: ChatQueue }) {
   const client = createChatClient(cfg);
   const guide = loadHeartbeatGuide();
   const intervalMs = (cfg.bot?.heartbeatIntervalHours ?? cfg.bot?.checkinIntervalHours ?? 24) * 60 * 60 * 1000;

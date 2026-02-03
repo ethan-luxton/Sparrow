@@ -1,13 +1,13 @@
 import type OpenAI from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { createCodingClient, getCodingModel } from './llm.js';
-import type { SparrowConfig } from '../config/config.js';
+import type { PixelTrailConfig } from '../config/config.js';
 
 export class CodingClient {
   private client: OpenAI;
   private model: string;
 
-  constructor(cfg: SparrowConfig) {
+  constructor(cfg: PixelTrailConfig) {
     this.client = createCodingClient(cfg);
     this.model = getCodingModel(cfg);
   }

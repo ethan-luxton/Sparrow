@@ -24,7 +24,7 @@ Example
 
 ## Safety and constraints
 - Write actions require confirm=true
-- localPath restricted to ~/.sparrow base dir
+- localPath restricted to ~/.pixeltrail base dir
 
 ## Common patterns
 - Find files and export to text

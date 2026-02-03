@@ -1,7 +1,7 @@
 import type OpenAI from 'openai';
 import type { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
 import { createChatClient, getChatModel } from '../lib/llm.js';
-import type { SparrowConfig } from '../config/config.js';
+import type { PixelTrailConfig } from '../config/config.js';
 import type { WorkingState } from '../memory/workingState.js';
 import type { RetrievedMemory } from '../memory/ledger.js';
 import { injectMarkdown } from '../lib/markdown/injector.js';
@@ -23,7 +23,7 @@ export class AgentLLM {
   private client: OpenAI;
   private model: string;
 
-  constructor(cfg: SparrowConfig) {
+  constructor(cfg: PixelTrailConfig) {
     this.client = createChatClient(cfg);
     this.model = getChatModel(cfg);
   }

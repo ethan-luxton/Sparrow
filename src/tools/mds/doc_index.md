@@ -21,7 +21,7 @@ Example
 - search: array of matching paths
 
 ## Safety and constraints
-- Read-only; index stored under ~/.sparrow
+- Read-only; index stored under ~/.pixeltrail
 - Limits to 2000 files
 
 ## Common patterns
