@@ -1,7 +1,6 @@
 import type Database from 'better-sqlite3';
 import type { ToolRegistry } from '../tools/registry.js';
-import { getDbHandle } from '../lib/db.js';
-import { addMessage } from '../lib/db.js';
+import { getDbHandle, addMessage, getLastMessageTimestamp, listChats } from '../lib/db.js';
 import { deriveFactsFromMessage } from '../memory/derive.js';
 import {
   addMemoryItem,
@@ -32,6 +31,8 @@ import {
 export interface AgentRuntimeOptions {
   tickMaxToolCalls?: number;
   tickMaxTokens?: number;
+  proactiveIntervalMs?: number;
+  proactiveIdleMs?: number;
 }
 
 export type Notifier = (chatId: number, text: string) => Promise<void>;
@@ -39,6 +40,7 @@ export type Notifier = (chatId: number, text: string) => Promise<void>;
 export interface AgentLLMLike {
   summarizeRepoRecon(input: SummaryInput, maxTokens?: number): Promise<LLMResult>;
   summarizeCalendar(input: SummaryInput, maxTokens?: number): Promise<LLMResult>;
+  summarizeProactive(input: SummaryInput, maxTokens?: number): Promise<LLMResult>;
   phraseUserUpdate(input: { objective: string; content: string }, maxTokens?: number): Promise<LLMResult>;
 }
 
@@ -47,7 +49,26 @@ export interface NotifyState {
   message?: string;
 }
 
-const ALLOWED_RUNTIME_TOOLS = new Set(['cli', 'file_snippet', 'code_search', 'doc_index', 'project_summary', 'google_calendar']);
+const ALLOWED_RUNTIME_TOOLS = new Set([
+  'cli',
+  'file_snippet',
+  'code_search',
+  'doc_index',
+  'project_summary',
+  'google_calendar',
+  'workspace',
+  'git',
+  'system_info',
+  'disk_usage',
+  'process_list',
+  'service_status',
+]);
+
+const RUNTIME_SAFE_ACTIONS: Record<string, Set<string>> = {
+  google_calendar: new Set(['list_events', 'list_calendars']),
+  workspace: new Set(['ensure_workspace', 'list_projects', 'read_file', 'list_files', 'search']),
+  git: new Set(['status', 'log', 'diff', 'show', 'branch_list', 'config_list']),
+};
 
 function summarize(text: string, maxLen = 800) {
   if (text.length <= maxLen) return text;
@@ -69,6 +90,11 @@ function needsClarification(message: string) {
   if (trimmed.length < 8) return true;
   if (/^help$/i.test(trimmed)) return true;
   return false;
+}
+
+function isScratchProject(name?: string | null) {
+  if (!name) return true;
+  return name.startsWith('scratch-');
 }
 
 export function shouldNotifyUser(state: NotifyState, lastNotifiedAt: string | null) {
@@ -164,7 +190,7 @@ export class AgentRuntime {
     sealPendingBlocks(this.db, { force: true });
   }
 
-  private enqueueRepoRecon(chatId: number, objectiveId: number) {
+  private enqueueRepoRecon(chatId: number, objectiveId: number | null) {
     enqueueTask(
       {
         chatId,
@@ -202,7 +228,7 @@ export class AgentRuntime {
     );
   }
 
-  private enqueueCalendarOverview(chatId: number, objectiveId: number) {
+  private enqueueCalendarOverview(chatId: number, objectiveId: number | null) {
     const now = new Date();
     const timeMin = now.toISOString();
     const timeMax = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -225,6 +251,83 @@ export class AgentRuntime {
         objectiveId,
         type: 'llm_summary',
         payload: { kind: 'calendar_summary', notify: true },
+      },
+      this.db
+    );
+  }
+
+  private shouldQueueProactive(chatId: number) {
+    const state = getAgentState(chatId, this.db);
+    if (state.paused || state.canceled) return false;
+    const lastMsgIso = getLastMessageTimestamp(chatId);
+    if (!lastMsgIso) return false;
+    const lastMsgMs = Date.parse(lastMsgIso);
+    if (!Number.isFinite(lastMsgMs)) return false;
+    const idleMs = Date.now() - lastMsgMs;
+    const idleThreshold = this.opts.proactiveIdleMs ?? 30 * 60 * 1000;
+    if (idleMs < idleThreshold) return false;
+
+    const lastNotifyMs = state.lastNotifiedAt ? Date.parse(state.lastNotifiedAt) : 0;
+    const intervalMs = this.opts.proactiveIntervalMs ?? 60 * 60 * 1000;
+    if (Date.now() - lastNotifyMs < intervalMs) return false;
+
+    return true;
+  }
+
+  private maybeQueueProactiveTasks(chatId: number) {
+    if (!this.shouldQueueProactive(chatId)) return;
+    if (getNextTask(chatId, this.db)) return;
+
+    const objective = getActiveObjective(chatId, this.db);
+    const working = getWorkingState(chatId, this.db);
+    const intent = `${objective?.text ?? ''} ${working.objective ?? ''}`.trim();
+    const objectiveId = objective?.id ?? null;
+
+    if (detectCalendar(intent)) {
+      this.enqueueCalendarOverview(chatId, objectiveId);
+      return;
+    }
+    if (detectRepoRecon(intent)) {
+      this.enqueueRepoRecon(chatId, objectiveId);
+      return;
+    }
+
+    enqueueTask(
+      {
+        chatId,
+        objectiveId,
+        type: 'tool',
+        payload: {
+          tool: 'workspace',
+          args: { action: 'list_projects' },
+          observationLabel: 'Workspace projects',
+        },
+      },
+      this.db
+    );
+
+    if (!isScratchProject(working.currentProject)) {
+      enqueueTask(
+        {
+          chatId,
+          objectiveId,
+          type: 'tool',
+          payload: {
+            tool: 'git',
+            args: { action: 'status', project: working.currentProject },
+            observationLabel: `Git status (${working.currentProject})`,
+          },
+        },
+        this.db
+      );
+    }
+
+    enqueueTask(
+      {
+        chatId,
+        objectiveId,
+        type: 'llm_summary',
+        payload: { kind: 'proactive_insight', notify: true },
       },
       this.db
     );
@@ -270,14 +373,19 @@ export class AgentRuntime {
         const summary =
           payload.kind === 'calendar_summary'
             ? await this.llm.summarizeCalendar(summaryInput, maxTokens)
-            : await this.llm.summarizeRepoRecon(summaryInput, maxTokens);
-        addMessage(chatId, 'assistant', summary.text);
-        recordAssistantMessage(chatId, summary.text);
-        recordObservation(chatId, summarize(summary.text, 500), { taskId: task.id });
-        const notifyState = { reason: payload.notify ? 'checkpoint' : 'none', message: summary.text } as const;
-        if (shouldNotifyUser(notifyState, getAgentState(chatId, this.db).lastNotifiedAt)) {
-          await this.notify(chatId, summary.text);
-          updateAgentState(chatId, { lastNotifiedAt: new Date().toISOString() }, this.db);
+            : payload.kind === 'proactive_insight'
+              ? await this.llm.summarizeProactive(summaryInput, maxTokens)
+              : await this.llm.summarizeRepoRecon(summaryInput, maxTokens);
+        const cleaned = summary.text.trim();
+        if (cleaned) {
+          addMessage(chatId, 'assistant', cleaned);
+          recordAssistantMessage(chatId, cleaned);
+          recordObservation(chatId, summarize(cleaned, 500), { taskId: task.id });
+          const notifyState = { reason: payload.notify ? 'checkpoint' : 'none', message: cleaned } as const;
+          if (shouldNotifyUser(notifyState, getAgentState(chatId, this.db).lastNotifiedAt)) {
+            await this.notify(chatId, cleaned);
+            updateAgentState(chatId, { lastNotifiedAt: new Date().toISOString() }, this.db);
+          }
         }
         markTaskCompleted(task.id, chatId, this.db);
         sealPendingBlocks(this.db, { force: true });
@@ -334,8 +442,12 @@ export class AgentRuntime {
   }
 
   async tickAll() {
-    const chats = listChatsWithQueuedTasks(this.db);
+    const chats = listChats();
     for (const chatId of chats) {
+      this.maybeQueueProactiveTasks(chatId);
+    }
+    const queued = listChatsWithQueuedTasks(this.db);
+    for (const chatId of queued) {
       await this.tick(chatId);
     }
   }
@@ -359,14 +471,9 @@ export class AgentRuntime {
     const tool = this.tools.get(name);
     if (!tool) throw new Error(`Tool not found: ${name}`);
     if (tool.permission !== 'read') {
-      if (name === 'google_calendar') {
-        const action = String((args as any)?.action ?? '');
-        if (action === 'list_events' || action === 'list_calendars') {
-          // Safe, read-only calendar actions.
-        } else {
-          throw new Error(`Tool ${name} requires write permissions. Provide a patch/diff for the user to apply.`);
-        }
-      } else {
+      const action = String((args as any)?.action ?? '');
+      const allowed = RUNTIME_SAFE_ACTIONS[name]?.has(action);
+      if (!allowed) {
         throw new Error(`Tool ${name} requires write permissions. Provide a patch/diff for the user to apply.`);
       }
     }

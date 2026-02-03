@@ -2,6 +2,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import url from 'node:url';
+import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import fs from 'fs-extra';
 import Database from 'better-sqlite3';
@@ -21,6 +22,7 @@ const MAX_MESSAGES = 200;
 const MAX_FILE_EVENTS = 200;
 const MAX_DB_ROWS = 500;
 const MAX_USAGE_ROWS = 24;
+const MAX_UPLOAD_BYTES = 12_000_000;
 const foreignIpsSeen = new Set<string>();
 
 function normalizeRemote(remote?: string | null) {
@@ -100,6 +102,46 @@ type TokenUsageRow = {
   totalTokens: number | null;
 };
 
+type LedgerChainRow = {
+  chain_id: string;
+  created_at: string;
+  genesis_hash: string | null;
+  head_hash: string | null;
+  head_height: number | null;
+};
+
+type LedgerBlockRow = {
+  block_id: string;
+  chain_id: string;
+  height: number;
+  ts: string;
+  role: string;
+  author_id: string | null;
+  content: string | null;
+  content_hash: string | null;
+  prev_hash: string | null;
+  header_hash: string | null;
+  keywords_json: string | null;
+  tags_json: string | null;
+  references_json: string | null;
+  metadata_json: string | null;
+  redacted: number | null;
+};
+
+type LedgerKeywordRow = {
+  block_id: string;
+  chain_id: string;
+  keyword: string;
+};
+
+type LedgerSummaryRow = {
+  chain_id: string;
+  up_to_height: number;
+  summary_text: string;
+  summary_hash: string;
+  ts: string;
+};
+
 function latestLogFile(): string | null {
   if (!fs.existsSync(logsDir)) return null;
   const files = fs
@@ -137,6 +179,13 @@ function safeParseJson(raw: string) {
   } catch {
     return raw;
   }
+}
+
+function formatJsonText(raw: string | null) {
+  if (!raw) return '';
+  const parsed = safeParseJson(raw);
+  if (typeof parsed === 'string') return redactSensitiveText(parsed);
+  return JSON.stringify(redactSensitiveObject(parsed), null, 2);
 }
 
 function truncateText(text: string, max = 400) {
@@ -417,6 +466,186 @@ function getTokenUsage(limit: number) {
   }
 }
 
+function getLedgerChains(limit: number) {
+  const db = openDb();
+  if (!db) return [];
+  try {
+    const rows = db
+      .prepare('SELECT chain_id, created_at, genesis_hash, head_hash, head_height FROM chains ORDER BY created_at DESC LIMIT ?')
+      .all(limit) as LedgerChainRow[];
+    return rows.map((row) => ({
+      chainId: row.chain_id,
+      createdAt: row.created_at,
+      genesisHash: row.genesis_hash,
+      headHash: row.head_hash,
+      headHeight: row.head_height,
+    }));
+  } catch {
+    return [];
+  } finally {
+    db.close();
+  }
+}
+
+function getLedgerBlocks(options: {
+  limit: number;
+  offset: number;
+  order: 'asc' | 'desc';
+  chainId?: string;
+  role?: string;
+  keyword?: string;
+  search?: string;
+}) {
+  const db = openDb();
+  if (!db) return { items: [], total: 0 };
+  try {
+    const filters: string[] = [];
+    const params: Array<string | number> = [];
+    const join = options.keyword
+      ? 'JOIN block_keywords bk ON bk.block_id = blocks.block_id AND bk.chain_id = blocks.chain_id'
+      : '';
+    if (options.chainId) {
+      filters.push('blocks.chain_id = ?');
+      params.push(options.chainId);
+    }
+    if (options.role) {
+      filters.push('blocks.role = ?');
+      params.push(options.role);
+    }
+    if (options.keyword) {
+      filters.push('bk.keyword = ?');
+      params.push(options.keyword);
+    }
+    if (options.search) {
+      filters.push('blocks.content LIKE ?');
+      params.push(`%${options.search}%`);
+    }
+    const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+    const order = options.order === 'asc' ? 'ASC' : 'DESC';
+    const countRow = db
+      .prepare(`SELECT COUNT(DISTINCT blocks.block_id) as count FROM blocks ${join} ${where}`)
+      .get(...params) as { count: number } | undefined;
+    const rows = db
+      .prepare(
+        `SELECT DISTINCT blocks.block_id, blocks.chain_id, blocks.height, blocks.ts, blocks.role, blocks.author_id,
+                blocks.content, blocks.content_hash, blocks.prev_hash, blocks.header_hash,
+                blocks.keywords_json, blocks.tags_json, blocks.references_json, blocks.metadata_json, blocks.redacted
+         FROM blocks ${join} ${where}
+         ORDER BY blocks.ts ${order} LIMIT ? OFFSET ?`
+      )
+      .all(...params, options.limit, options.offset) as LedgerBlockRow[];
+    return {
+      total: countRow?.count ?? 0,
+      items: rows.map((row) => ({
+        blockId: row.block_id,
+        chainId: row.chain_id,
+        height: row.height,
+        ts: row.ts,
+        role: row.role,
+        authorId: row.author_id,
+        content: redactSensitiveText(row.content ?? ''),
+        contentHash: row.content_hash,
+        prevHash: row.prev_hash,
+        headerHash: row.header_hash,
+        keywords: formatJsonText(row.keywords_json),
+        tags: formatJsonText(row.tags_json),
+        references: formatJsonText(row.references_json),
+        metadata: formatJsonText(row.metadata_json),
+        redacted: row.redacted ? true : false,
+      })),
+    };
+  } catch {
+    return { items: [], total: 0 };
+  } finally {
+    db.close();
+  }
+}
+
+function getLedgerKeywords(options: {
+  limit: number;
+  offset: number;
+  order: 'asc' | 'desc';
+  chainId?: string;
+  keyword?: string;
+}) {
+  const db = openDb();
+  if (!db) return { items: [], total: 0 };
+  try {
+    const filters: string[] = [];
+    const params: Array<string | number> = [];
+    if (options.chainId) {
+      filters.push('chain_id = ?');
+      params.push(options.chainId);
+    }
+    if (options.keyword) {
+      filters.push('keyword = ?');
+      params.push(options.keyword);
+    }
+    const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+    const order = options.order === 'asc' ? 'ASC' : 'DESC';
+    const countRow = db.prepare(`SELECT COUNT(*) as count FROM block_keywords ${where}`).get(...params) as
+      | { count: number }
+      | undefined;
+    const rows = db
+      .prepare(`SELECT block_id, chain_id, keyword FROM block_keywords ${where} ORDER BY keyword ${order} LIMIT ? OFFSET ?`)
+      .all(...params, options.limit, options.offset) as LedgerKeywordRow[];
+    return {
+      total: countRow?.count ?? 0,
+      items: rows.map((row) => ({
+        blockId: row.block_id,
+        chainId: row.chain_id,
+        keyword: row.keyword,
+      })),
+    };
+  } catch {
+    return { items: [], total: 0 };
+  } finally {
+    db.close();
+  }
+}
+
+function getLedgerSummaries(options: {
+  limit: number;
+  offset: number;
+  order: 'asc' | 'desc';
+  chainId?: string;
+}) {
+  const db = openDb();
+  if (!db) return { items: [], total: 0 };
+  try {
+    const filters: string[] = [];
+    const params: Array<string | number> = [];
+    if (options.chainId) {
+      filters.push('chain_id = ?');
+      params.push(options.chainId);
+    }
+    const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+    const order = options.order === 'asc' ? 'ASC' : 'DESC';
+    const countRow = db.prepare(`SELECT COUNT(*) as count FROM summaries ${where}`).get(...params) as
+      | { count: number }
+      | undefined;
+    const rows = db
+      .prepare(
+        `SELECT chain_id, up_to_height, summary_text, summary_hash, ts FROM summaries ${where} ORDER BY ts ${order} LIMIT ? OFFSET ?`
+      )
+      .all(...params, options.limit, options.offset) as LedgerSummaryRow[];
+    return {
+      total: countRow?.count ?? 0,
+      items: rows.map((row) => ({
+        chainId: row.chain_id,
+        upToHeight: row.up_to_height,
+        summaryText: redactSensitiveText(row.summary_text ?? ''),
+        summaryHash: row.summary_hash,
+        ts: row.ts,
+      })),
+    };
+  } catch {
+    return { items: [], total: 0 };
+  } finally {
+    db.close();
+  }
+}
+
 function getStatus() {
   const mem = process.memoryUsage();
   const totalMem = os.totalmem();
@@ -516,6 +745,20 @@ function loadAssetText(filename: string) {
     }
   }
   return '';
+}
+
+function sanitizeFilename(name: string) {
+  const base = path.basename(name || 'upload');
+  return base.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 120) || 'upload';
+}
+
+function decodeBase64(input: string) {
+  const trimmed = input.trim();
+  const match = trimmed.match(/^data:([^;]+);base64,(.+)$/i);
+  if (match) {
+    return { mime: match[1], data: match[2] };
+  }
+  return { mime: '', data: trimmed };
 }
 
 const htmlPages = new Map<string, string>([
@@ -639,6 +882,51 @@ export function startDashboard(options: DashboardOptions = {}) {
       const action = typeof parsed.query.action === 'string' && parsed.query.action ? String(parsed.query.action) : undefined;
       return sendJson(res, getToolLogRows({ limit, offset, order, chatId, tool, action }));
     }
+    if (pathname === '/api/db/ledger-chains') {
+      if (req.method !== 'GET') {
+        res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
+        return res.end('Method Not Allowed');
+      }
+      const limit = Math.min(Math.max(Number(parsed.query.limit ?? 50), 1), MAX_DB_ROWS);
+      return sendJson(res, { items: getLedgerChains(limit) });
+    }
+    if (pathname === '/api/db/ledger-blocks') {
+      if (req.method !== 'GET') {
+        res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
+        return res.end('Method Not Allowed');
+      }
+      const limit = Math.min(Math.max(Number(parsed.query.limit ?? 120), 1), MAX_DB_ROWS);
+      const offset = Math.max(Number(parsed.query.offset ?? 0), 0);
+      const order = parsed.query.order === 'asc' ? 'asc' : 'desc';
+      const chainId = typeof parsed.query.chainId === 'string' && parsed.query.chainId ? String(parsed.query.chainId) : undefined;
+      const role = typeof parsed.query.role === 'string' && parsed.query.role ? String(parsed.query.role) : undefined;
+      const keyword = typeof parsed.query.keyword === 'string' && parsed.query.keyword ? String(parsed.query.keyword) : undefined;
+      const search = typeof parsed.query.search === 'string' && parsed.query.search ? String(parsed.query.search) : undefined;
+      return sendJson(res, getLedgerBlocks({ limit, offset, order, chainId, role, keyword, search }));
+    }
+    if (pathname === '/api/db/ledger-keywords') {
+      if (req.method !== 'GET') {
+        res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
+        return res.end('Method Not Allowed');
+      }
+      const limit = Math.min(Math.max(Number(parsed.query.limit ?? 120), 1), MAX_DB_ROWS);
+      const offset = Math.max(Number(parsed.query.offset ?? 0), 0);
+      const order = parsed.query.order === 'asc' ? 'asc' : 'desc';
+      const chainId = typeof parsed.query.chainId === 'string' && parsed.query.chainId ? String(parsed.query.chainId) : undefined;
+      const keyword = typeof parsed.query.keyword === 'string' && parsed.query.keyword ? String(parsed.query.keyword) : undefined;
+      return sendJson(res, getLedgerKeywords({ limit, offset, order, chainId, keyword }));
+    }
+    if (pathname === '/api/db/ledger-summaries') {
+      if (req.method !== 'GET') {
+        res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
+        return res.end('Method Not Allowed');
+      }
+      const limit = Math.min(Math.max(Number(parsed.query.limit ?? 120), 1), MAX_DB_ROWS);
+      const offset = Math.max(Number(parsed.query.offset ?? 0), 0);
+      const order = parsed.query.order === 'asc' ? 'asc' : 'desc';
+      const chainId = typeof parsed.query.chainId === 'string' && parsed.query.chainId ? String(parsed.query.chainId) : undefined;
+      return sendJson(res, getLedgerSummaries({ limit, offset, order, chainId }));
+    }
     if (pathname === '/api/usage') {
       if (req.method !== 'GET') {
         res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -677,6 +965,49 @@ export function startDashboard(options: DashboardOptions = {}) {
         } catch (err) {
           const msg = (err as Error).message;
           logger.error(`dashboard.chat.error ${msg}`);
+          return sendJson(res, { error: msg }, 500);
+        }
+      });
+      return;
+    }
+    if (pathname === '/api/chat/upload') {
+      if (req.method !== 'POST') {
+        res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
+        return res.end('Method Not Allowed');
+      }
+      let body = '';
+      req.on('data', (chunk) => {
+        body += chunk.toString('utf8');
+        if (body.length > MAX_UPLOAD_BYTES * 1.4) {
+          req.socket.destroy();
+        }
+      });
+      req.on('end', async () => {
+        try {
+          const payload = JSON.parse(body || '{}');
+          const filename = sanitizeFilename(String(payload.filename ?? 'upload'));
+          const { mime, data } = decodeBase64(String(payload.data ?? ''));
+          if (!data) return sendJson(res, { error: 'No data provided.' }, 400);
+          const buffer = Buffer.from(data, 'base64');
+          if (buffer.length > MAX_UPLOAD_BYTES) {
+            return sendJson(res, { error: 'File too large.' }, 413);
+          }
+          const ext = path.extname(filename);
+          const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+          const safeName = `${stamp}_${crypto.randomUUID()}${ext || ''}`;
+          const targetDir = path.join(baseDir, 'uploads');
+          await fs.ensureDir(targetDir);
+          const targetPath = path.join(targetDir, safeName);
+          await fs.writeFile(targetPath, buffer);
+          return sendJson(res, {
+            name: filename,
+            mime: mime || String(payload.mime ?? ''),
+            size: buffer.length,
+            path: targetPath,
+          });
+        } catch (err) {
+          const msg = (err as Error).message;
+          logger.error(`dashboard.upload.error ${msg}`);
           return sendJson(res, { error: msg }, 500);
         }
       });

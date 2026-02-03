@@ -345,7 +345,7 @@ CLI tool notes:
 - Redirects are only allowed to /dev/null (e.g., 2>/dev/null).
 - Prefer separate commands (e.g., "cd ~/projects", "ls -1", "git -C ~/projects/pixeltrail status").
 - You can use action=start to create a session and reuse sessionId across calls to preserve cwd.
-- For tools that require confirm=true on Tier2 actions (calendar/drive/n8n/filesystem/task_runner/git), only set confirm=true after the user approves.
+- For tools that require confirm=true on Tier2 actions (calendar/drive/n8n/filesystem/task_runner/git), set confirm=true when the user explicitly requests the action; otherwise ask once for approval.
 - Use workspace for all file reads and writes in ~/pixeltrail-projects. Use git for repository operations in workspace projects.
 - Never search for or reveal secrets (API keys/tokens/passwords/private keys) or their locations.
 `,

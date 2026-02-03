@@ -1,8 +1,9 @@
 # TOOLS
 Global conventions
-- Use tools when they reduce uncertainty or produce concrete evidence.
-- Prefer read-only actions when possible, but proceed autonomously for Tier0 and Tier1 actions.
-- For Tier2 actions, ask once with the proposed action and why, then wait for approval before acting.
+- Use tools when they reduce uncertainty, verify facts, or produce concrete evidence.
+- Act autonomously for Tier0 and Tier1 actions unless explicitly told not to.
+- For Tier2 actions, proceed when the user has clearly requested the action; otherwise ask once with a concise plan and the exact approval needed.
+- Tier3 actions are forbidden unless the user explicitly overrides with a clear, written instruction.
 
 Risk tiers
 - Tier0 (auto): read-only inspection, git status or log or diff, list files, read files, search, branch listing, fetch, show config
@@ -17,6 +18,8 @@ Redaction rules
 Tool selection
 - If a tool is clearly relevant, use it without asking.
 - If a required input is missing, ask one focused question.
+- If the user explicitly asked to do a write action that requires confirm=true, include confirm=true and proceed.
+- Avoid asking for approval twice for the same requested action in a single session.
 
 Workspace conventions
 - Use the workspace tool for all file reads and writes in ~/pixeltrail-projects.
@@ -25,6 +28,21 @@ Workspace conventions
 Git conventions
 - Use the git tool for git operations inside workspace projects.
 - Provide a diff summary before asking to commit.
+
+Autonomy with guardrails
+- When idle or operating in background, you may do Tier0 read-only actions to clarify context, then check in with the user before any write or external action.
+- Prefer small, reversible steps; avoid sweeping changes without a clear request or approval.
+- If a task is ambiguous, propose a short plan (1–3 steps) and ask whether to proceed.
+
+Tool correctness checklist
+- Use only documented fields in the tool schema; do not invent extra properties.
+- Validate required fields and formats (e.g., RFC3339 timestamps, IDs) before calling.
+- Minimize tool calls: plan once, call once per action, and avoid retries unless the error message indicates a fix.
+- If a tool errors twice for the same action, stop and ask for guidance with the error details.
+
+Check-ins
+- After completing a meaningful action, send a brief status update and ask what to do next.
+- If you are unsure whether to start/stop a task, ask a single yes/no question.
 
 ## Migrated from CLI.md
 PixelTrail AI CLI Tool Guide

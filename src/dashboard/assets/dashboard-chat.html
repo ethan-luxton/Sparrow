@@ -25,13 +25,30 @@
       <section class="section">
         <div class="section-title">Chat</div>
         <div class="grid">
-          <div class="card wide">
-            <h2>Chat</h2>
-            <div class="chat">
-              <div class="chat-messages" id="chat-messages"></div>
-              <div class="chat-input">
-                <input id="chat-input" placeholder="Message PixelTrail AI…" />
-                <button id="chat-send">Send</button>
+          <div class="card wide chat-card">
+            <div class="chat-shell">
+              <div class="chat-header">
+                <div>
+                  <div class="chat-title">Chat with PixelTrail AI</div>
+                  <div class="chat-subtitle">Fast, local, and tool-aware. Drag files or record audio.</div>
+                </div>
+                <div class="chat-actions">
+                  <button class="ghost" id="chat-clear">Clear</button>
+                </div>
+              </div>
+              <div class="chat-stream" id="chat-messages"></div>
+              <div class="chat-composer">
+                <div class="attachment-list" id="chat-attachments"></div>
+                <div class="composer-row">
+                  <button class="ghost" id="chat-attach">Attach</button>
+                  <button class="ghost" id="chat-record">Record</button>
+                  <div class="composer-input">
+                    <textarea id="chat-input" rows="1" placeholder="Ask anything, drop files, or use voice…" spellcheck="true"></textarea>
+                  </div>
+                  <button class="primary" id="chat-send">Send</button>
+                </div>
+                <div class="composer-hint" id="chat-hint">Shift+Enter for new line. Files are stored locally.</div>
+                <input id="chat-file" type="file" multiple hidden />
               </div>
             </div>
           </div>

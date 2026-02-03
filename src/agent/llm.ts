@@ -98,6 +98,30 @@ export class AgentLLM {
     return { text };
   }
 
+  async summarizeProactive(input: SummaryInput, maxTokens = 180): Promise<LLMResult> {
+    const messages: ChatCompletionMessageParam[] = [
+      {
+        role: 'system',
+        content:
+          'You are a proactive assistant. Produce 2–4 concise, grounded insights from observations. Avoid speculation. End with one short question to confirm what to do next.',
+      },
+      ...(this.workspaceMsg(input.objective) ? [this.workspaceMsg(input.objective) as ChatCompletionMessageParam] : []),
+      { role: 'system', content: `Objective:\n${input.objective}` },
+      { role: 'system', content: `Working state:\n${this.formatWorkingState(input.workingState)}` },
+      { role: 'system', content: `Memories:\n${this.formatMemories(input.memories)}` },
+      { role: 'user', content: 'Summarize what you can infer from these observations, then ask one next-step question.' },
+      { role: 'assistant', content: input.observations.join('\n') || '(none)' },
+    ];
+    const completion = await this.client.chat.completions.create({
+      model: this.model,
+      messages,
+      max_tokens: maxTokens,
+      temperature: 0.2,
+    });
+    const text = completion.choices[0]?.message?.content?.trim() ?? '';
+    return { text };
+  }
+
   async phraseUserUpdate(input: { objective: string; content: string }, maxTokens = 120): Promise<LLMResult> {
     const messages: ChatCompletionMessageParam[] = [
       {

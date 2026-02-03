@@ -9,6 +9,7 @@ function createStubLLM() {
   return {
     summarizeRepoRecon: async () => ({ text: 'summary' }),
     summarizeCalendar: async () => ({ text: 'calendar summary' }),
+    summarizeProactive: async () => ({ text: 'proactive' }),
     phraseUserUpdate: async () => ({ text: 'update' }),
   };
 }
