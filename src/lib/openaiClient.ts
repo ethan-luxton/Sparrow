@@ -345,6 +345,8 @@ CLI tool notes:
         request.tool_choice = 'auto';
       }
       const timeoutMs = Number(process.env.SPARROW_MODEL_TIMEOUT_MS ?? 120000);
+      const baseUrl = this.cfg.openai?.baseUrl ?? process.env.OPENAI_BASE_URL ?? 'https://api.openai.com';
+      logger.info(`outbound.openai chatId=${chatId} model=${model} baseUrl=${baseUrl}`);
       const completion = await withTimeout(this.client.chat.completions.create(request), timeoutMs);
 
       const msg = completion.choices[0].message;

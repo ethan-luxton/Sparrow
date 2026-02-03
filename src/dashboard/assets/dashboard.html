@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sparrow Monitor</title>
+    <link rel="stylesheet" href="/assets/dashboard.css" />
+  </head>
+  <body>
+    <header>
+      <div class="title">Sparrow Monitor</div>
+      <div class="subtitle" id="subtitle">Live snapshot of Sparrow on this host.</div>
+    </header>
+    <div class="sections">
+      <section class="section">
+        <div class="section-title">System</div>
+        <div class="grid">
+          <div class="card">
+            <h2>System Overview</h2>
+            <div class="metric"><span>Host</span><strong id="host">-</strong></div>
+            <div class="metric"><span>PID</span><strong id="pid">-</strong></div>
+            <div class="metric"><span>Node</span><strong id="node">-</strong></div>
+            <div class="metric"><span>Platform</span><strong id="platform">-</strong></div>
+            <div class="metric"><span>Updated</span><strong id="updated">-</strong></div>
+          </div>
+          <div class="card">
+            <h2>Uptime</h2>
+            <div class="metric"><span>Process</span><strong id="uptime-process">-</strong></div>
+            <div class="metric"><span>OS</span><strong id="uptime-os">-</strong></div>
+            <div class="metric"><span>Load Avg</span><strong id="load">-</strong></div>
+          </div>
+          <div class="card">
+            <h2>Memory</h2>
+            <div class="metric"><span>RSS</span><strong id="rss">-</strong></div>
+            <div class="metric"><span>Heap Used</span><strong id="heap-used">-</strong></div>
+            <div class="metric"><span>Heap Total</span><strong id="heap-total">-</strong></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-title">Activity</div>
+        <div class="grid">
+          <div class="card">
+            <h2>Recent Tools</h2>
+            <div class="list" id="tool-logs"></div>
+          </div>
+          <div class="card">
+            <h2>Recent Messages</h2>
+            <div class="list" id="messages"></div>
+          </div>
+          <div class="card">
+            <h2>Recent Files</h2>
+            <div class="list" id="file-updates"></div>
+          </div>
+          <div class="card">
+            <h2>Chat</h2>
+            <div class="chat">
+              <div class="chat-messages" id="chat-messages"></div>
+              <div class="chat-input">
+                <input id="chat-input" placeholder="Message Sparrow…" />
+                <button id="chat-send">Send</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-title">Logs</div>
+        <div class="grid">
+          <div class="card">
+            <h2>Latest Logs</h2>
+            <div class="log" id="log-lines"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+    <script>
+      const fmtSeconds = (s) => {
+        const hours = Math.floor(s / 3600);
+        const minutes = Math.floor((s % 3600) / 60);
+        const seconds = Math.floor(s % 60);
+        if (hours > 0) return hours + "h " + minutes + "m";
+        if (minutes > 0) return minutes + "m " + seconds + "s";
+        return seconds + "s";
+      };
+      const fmtMb = (n) => n + " MB";
+      const setText = (id, text) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = text;
+      };
+      async function fetchJson(path) {
+        const res = await fetch(path);
+        if (!res.ok) throw new Error("Request failed");
+        return await res.json();
+      }
+      async function postJson(path, body) {
+        const res = await fetch(path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error("Request failed");
+        return await res.json();
+      }
+      function renderTools(items) {
+        const root = document.getElementById("tool-logs");
+        if (!root) return;
+        root.innerHTML = "";
+        items.slice(0, 12).forEach((item) => {
+          const row = document.createElement("div");
+          row.className = "row";
+          row.innerHTML =
+            "<strong>" +
+            item.tool +
+            " · " +
+            item.action +
+            "</strong>" +
+            "<span class='mono'>chat " +
+            item.chatId +
+            " · " +
+            item.createdAt +
+            "</span>";
+          root.appendChild(row);
+        });
+      }
+      function renderMessages(items) {
+        const root = document.getElementById("messages");
+        if (!root) return;
+        root.innerHTML = "";
+        items.slice(0, 8).forEach((item) => {
+          const row = document.createElement("div");
+          row.className = "row";
+          row.innerHTML =
+            "<span class='pill'>" +
+            item.role +
+            "</span>" +
+            "<div class='mono'>" +
+            item.content +
+            "</div>";
+          root.appendChild(row);
+        });
+      }
+      function renderFiles(items) {
+        const root = document.getElementById("file-updates");
+        if (!root) return;
+        root.innerHTML = "";
+        items.slice(0, 10).forEach((item) => {
+          const row = document.createElement("div");
+          row.className = "row";
+          row.innerHTML =
+            "<strong>" +
+            item.action +
+            "</strong>" +
+            "<span class='mono'>" +
+            item.path +
+            "</span>";
+          root.appendChild(row);
+        });
+      }
+      function renderLogs(lines, file) {
+        const root = document.getElementById("log-lines");
+        if (!root) return;
+        const stickToBottom = root.scrollTop + root.clientHeight >= root.scrollHeight - 20;
+        root.innerHTML = "";
+        if (!lines.length) {
+          root.textContent = "No logs yet.";
+          return;
+        }
+        lines.slice(-120).forEach((line) => {
+          const div = document.createElement("div");
+          div.className = "log-line mono";
+          div.textContent = line;
+          root.appendChild(div);
+        });
+        if (stickToBottom) root.scrollTop = root.scrollHeight;
+        setText("subtitle", "Latest log: " + file + " · Redacted for safety.");
+      }
+      function renderChat(items) {
+        const root = document.getElementById("chat-messages");
+        if (!root) return;
+        const stickToBottom = root.scrollTop + root.clientHeight >= root.scrollHeight - 20;
+        root.innerHTML = "";
+        items
+          .filter((item) => item.role === "user" || item.role === "assistant")
+          .slice(0, 10)
+          .reverse()
+          .forEach((item) => {
+            const bubble = document.createElement("div");
+            const who = item.role === "user" ? "me" : "assistant";
+            bubble.className = "chat-bubble " + who + " mono";
+            bubble.textContent = item.content;
+            root.appendChild(bubble);
+          });
+        if (stickToBottom) root.scrollTop = root.scrollHeight;
+      }
+      async function sendChat() {
+        const input = document.getElementById("chat-input");
+        if (!input || !input.value.trim()) return;
+        const text = input.value.trim();
+        input.value = "";
+        await postJson("/api/chat", { message: text });
+        await refresh();
+      }
+      async function refresh() {
+        try {
+          const status = await fetchJson("/api/status");
+          setText("host", status.hostname);
+          setText("pid", status.pid);
+          setText("node", status.nodeVersion);
+          setText("platform", status.platform + " · " + status.arch);
+          setText("uptime-process", fmtSeconds(status.processUptimeSeconds));
+          setText("uptime-os", fmtSeconds(status.osUptimeSeconds));
+          setText("load", status.loadAvg.map((v) => v.toFixed(2)).join(" / "));
+          setText("rss", fmtMb(status.memoryMB.rss));
+          setText("heap-used", fmtMb(status.memoryMB.heapUsed));
+          setText("heap-total", fmtMb(status.memoryMB.heapTotal));
+          setText("updated", new Date().toLocaleTimeString());
+          const tools = await fetchJson("/api/tool-logs?limit=24");
+          renderTools(tools.items || []);
+          const messages = await fetchJson("/api/messages?limit=16");
+          renderMessages(messages.items || []);
+          renderChat(messages.items || []);
+          const files = await fetchJson("/api/files?limit=20");
+          renderFiles(files.items || []);
+          const logs = await fetchJson("/api/logs?lines=160");
+          renderLogs(logs.lines || [], logs.file || "logs");
+        } catch (err) {
+          setText("subtitle", "Waiting for Sparrow data...");
+        }
+      }
+      refresh();
+      setInterval(refresh, 5000);
+      document.getElementById("chat-send")?.addEventListener("click", sendChat);
+      document.getElementById("chat-input")?.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") sendChat();
+      });
+    </script>
+  </body>
+</html>

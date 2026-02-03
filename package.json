@@ -8,7 +8,7 @@
     "sparrow": "dist/cli.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-dashboard-assets.js",
     "dev": "ts-node src/cli.ts",
     "run": "node dist/cli.js run",
     "lint": "eslint ."

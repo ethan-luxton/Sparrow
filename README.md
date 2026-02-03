@@ -78,6 +78,17 @@ Git actions are allowlisted and run inside workspace projects only. Branch defau
 - `sparrow google-auth` OAuth flow for Drive, Gmail, Calendar
 - `sparrow tools list` show available tools
 - `sparrow logs tail` show last log lines
+- `sparrow dashboard --host 0.0.0.0 --port 5527` start the local monitoring dashboard
+
+## Dashboard
+The dashboard serves a live local view of system status, tool activity, messages, and log tail.
+
+Run it on the host machine:
+```bash
+node dist/cli.js dashboard --host 0.0.0.0 --port 5527
+```
+
+Then open the printed LAN URL from any device on the same network.
 
 ## Configuration
 Config is stored at `~/.sparrow/config.json`. You can override model selection with:
