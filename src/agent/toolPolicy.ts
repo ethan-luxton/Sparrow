@@ -2,7 +2,7 @@ import type { ToolDefinition, Permission } from '../tools/registry.js';
 
 export type ToolRiskTier = 0 | 1 | 2 | 3;
 
-const NETWORK_TOOLS = new Set(['google_drive', 'gmail', 'google_calendar', 'weather', 'n8n', 'whisper_transcribe']);
+const NETWORK_TOOLS = new Set(['google_drive', 'gmail', 'google_calendar', 'weather', 'n8n', 'whisper_transcribe', 'todoist']);
 const FORBIDDEN_TOOLS = new Set<string>();
 const ACTION_TIERS: Record<string, Record<string, ToolRiskTier>> = {
   workspace: {
@@ -37,6 +37,14 @@ const ACTION_TIERS: Record<string, Record<string, ToolRiskTier>> = {
     merge: 2,
     rebase: 2,
     tag: 2,
+  },
+  todoist: {
+    list_tasks: 1,
+    filter_tasks: 1,
+    get_task: 1,
+    create_task: 2,
+    update_task: 2,
+    delete_task: 2,
   },
 };
 

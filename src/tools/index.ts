@@ -7,6 +7,7 @@ import { notesTool } from './notes.js';
 import { calendarTool } from './calendar.js';
 import { n8nTool } from './n8n.js';
 import { weatherTool } from './weather.js';
+import { todoistTool } from './todoist.js';
 import type { PixelTrailConfig } from '../config/config.js';
 import { cliTool } from './cli.js';
 import { codeSearchTool } from './codeSearch.js';
@@ -46,6 +47,7 @@ export function buildToolRegistry(cfg?: PixelTrailConfig) {
   registry.register(calendarTool());
   registry.register(n8nTool());
   registry.register(weatherTool());
+  registry.register(todoistTool());
   registry.register(whisperTool());
   registry.register(workspaceTool());
   registry.register(gitTool());

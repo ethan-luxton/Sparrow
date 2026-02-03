@@ -111,6 +111,7 @@ const ALLOW_ACTIONS: Record<string, Set<string>> = {
   n8n: new Set(['list_workflows', 'get_workflow', 'list_executions', 'workflow_schema']),
   filesystem: new Set(['read', 'list', 'read_pdf_text', 'read_docx_text']),
   notes: new Set(['add', 'list']),
+  todoist: new Set(['list_tasks', 'filter_tasks', 'get_task']),
   workspace: new Set([
     'ensure_workspace',
     'list_projects',
@@ -154,6 +155,7 @@ const CONFIRM_ACTIONS: Record<string, Set<string>> = {
     'rebase',
     'tag',
   ]),
+  todoist: new Set(['create_task', 'update_task', 'delete_task']),
 };
 
 function enforceToolPolicy(tool: ToolDefinition, args: unknown) {

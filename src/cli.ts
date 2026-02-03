@@ -163,12 +163,12 @@ configCmd
   });
 configCmd
   .command('get <path>')
-  .description('Get a config value (supports openai.apiKey, telegram.botToken)')
+  .description('Get a config value (supports openai.apiKey, telegram.botToken, todoist.token)')
   .action((pathKey) => {
     logAction('cli.config.get', { path: pathKey });
     const cfg = loadConfig();
     try {
-      if (pathKey === 'openai.apiKey' || pathKey === 'telegram.botToken') {
+      if (pathKey === 'openai.apiKey' || pathKey === 'telegram.botToken' || pathKey === 'todoist.token') {
         console.log(getSecret(cfg, pathKey as any));
         return;
       }
@@ -195,7 +195,8 @@ configCmd
       pathKey === 'telegram.botToken' ||
       pathKey === 'google.clientSecret' ||
       pathKey === 'google.token' ||
-      pathKey === 'n8n.apiKey'
+      pathKey === 'n8n.apiKey' ||
+      pathKey === 'todoist.token'
     ) {
       cfg = setSecret(cfg, pathKey as any, value);
     } else if (pathKey === 'google.clientId') {

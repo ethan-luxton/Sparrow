@@ -9,7 +9,8 @@ export type SecretField =
   | 'google.token'
   | 'n8n.apiKey'
   | 'n8n.basicUser'
-  | 'n8n.basicPass';
+  | 'n8n.basicPass'
+  | 'todoist.token';
 
 export interface PixelTrailConfig {
   encryption: {
@@ -49,6 +50,10 @@ export interface PixelTrailConfig {
     apiKeyEnc?: string;
     basicUserEnc?: string;
     basicPassEnc?: string;
+  };
+  todoist?: {
+    baseUrl?: string;
+    tokenEnc?: string;
   };
   paths?: {
     dataDir?: string;
@@ -127,6 +132,9 @@ const defaultConfig: PixelTrailConfig = {
     tickMaxToolCalls: 1,
     tickMaxTokens: 320,
   },
+  todoist: {
+    baseUrl: 'https://api.todoist.com/api/v1',
+  },
 };
 
 function ensureDirs() {
@@ -163,6 +171,9 @@ export function loadConfig(): PixelTrailConfig {
   if (process.env.N8N_BASE_URL) {
     existing.n8n = { ...(existing.n8n ?? {}), baseUrl: process.env.N8N_BASE_URL };
   }
+  if (process.env.TODOIST_BASE_URL) {
+    existing.todoist = { ...(existing.todoist ?? {}), baseUrl: process.env.TODOIST_BASE_URL };
+  }
   // merge defaults without overriding existing
   return {
     ...defaultConfig,
@@ -177,6 +188,7 @@ export function loadConfig(): PixelTrailConfig {
     bot: { ...defaultConfig.bot, ...(existing.bot ?? {}) },
     tasks: { ...defaultConfig.tasks, ...(existing.tasks ?? {}) },
     agent: { ...defaultConfig.agent, ...(existing.agent ?? {}) },
+    todoist: { ...defaultConfig.todoist, ...(existing.todoist ?? {}) },
   };
 }
 
@@ -211,6 +223,8 @@ function envFallback(field: SecretField): string | undefined {
       return process.env.N8N_BASIC_USER;
     case 'n8n.basicPass':
       return process.env.N8N_BASIC_PASS;
+    case 'todoist.token':
+      return process.env.TODOIST_API_TOKEN;
     // n8n uses baseUrl in plain config; api key can come from env
     default:
       return undefined;
@@ -245,5 +259,6 @@ export function redacted(cfg: PixelTrailConfig) {
   if (clone.telegram?.botTokenEnc) clone.telegram.botTokenEnc = '***';
   if (clone.google?.clientSecretEnc) clone.google.clientSecretEnc = '***';
   if (clone.google?.tokenEnc) clone.google.tokenEnc = '***';
+  if (clone.todoist?.tokenEnc) clone.todoist.tokenEnc = '***';
   return clone;
 }
