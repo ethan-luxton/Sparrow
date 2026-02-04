@@ -4,8 +4,7 @@ import { PixelTrailConfig } from '../config/config.js';
 import { logger } from './logger.js';
 import { ToolRegistry } from '../tools/registry.js';
 import type { ChatCompletionMessageParam, ChatCompletionTool } from 'openai/resources/chat/completions';
-import { createChatClient, getChatModel, supportsTools } from './llm.js';
-import type OpenAI from 'openai';
+import { createChatCompletion, getAIProvider, getChatModel, supportsTools } from './llm.js';
 import { choose_next_step } from '../agent/decision.js';
 import { filterToolsByTier, getActionTier, getToolRiskTier } from '../agent/toolPolicy.js';
 import { deriveFactsFromMessage } from '../memory/derive.js';
@@ -116,11 +115,9 @@ function parseGitSequence(text: string): { commitMessage?: string; branch?: stri
 }
 
 export class OpenAIClient {
-  private client: OpenAI;
   private cfg: PixelTrailConfig;
 
   constructor(cfg: PixelTrailConfig) {
-    this.client = createChatClient(cfg);
     this.cfg = cfg;
   }
 
@@ -369,9 +366,13 @@ CLI tool notes:
         request.tool_choice = 'auto';
       }
       const timeoutMs = Number(process.env.PIXELTRAIL_MODEL_TIMEOUT_MS ?? 120000);
-      const baseUrl = this.cfg.openai?.baseUrl ?? process.env.OPENAI_BASE_URL ?? 'https://api.openai.com';
-      logger.info(`outbound.openai chatId=${chatId} model=${model} baseUrl=${baseUrl}`);
-      const completion = await withTimeout(this.client.chat.completions.create(request), timeoutMs);
+      const provider = getAIProvider(this.cfg);
+      const baseUrl =
+        provider === 'anthropic'
+          ? this.cfg.anthropic?.baseUrl ?? process.env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com'
+          : this.cfg.openai?.baseUrl ?? process.env.OPENAI_BASE_URL ?? 'https://api.openai.com';
+      logger.info(`outbound.llm chatId=${chatId} provider=${provider} model=${model} baseUrl=${baseUrl}`);
+      const completion = await withTimeout(createChatCompletion(this.cfg, request), timeoutMs);
       const usage = completion.usage as
         | { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number; input_tokens?: number; output_tokens?: number }
         | undefined;

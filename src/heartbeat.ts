@@ -1,11 +1,10 @@
 import fs from 'fs-extra';
 import path from 'node:path';
 import TelegramBot from 'node-telegram-bot-api';
-import type OpenAI from 'openai';
 import { PixelTrailConfig } from './config/config.js';
 import { getLastMessageTimestamp, getLastCheckin, setLastCheckin, listChats, getMessages, getUserProfile, setUserProfile } from './lib/db.js';
 import { logger } from './lib/logger.js';
-import { createChatClient, getChatModel } from './lib/llm.js';
+import { createChatCompletion, getChatModel } from './lib/llm.js';
 import type { ChatQueue } from './lib/queues.js';
 
 const HEARTBEAT_PATHS = [path.resolve(process.cwd(), 'src', 'agent', 'mds', 'HEARTBEAT.md')];
@@ -85,7 +84,6 @@ function isWithinActiveHours(cfg: PixelTrailConfig) {
 async function runHeartbeatForChat(
   chatId: number,
   bot: TelegramBot,
-  client: OpenAI,
   cfg: PixelTrailConfig,
   guide: { path: string; content: string } | null,
   intervalMs: number,
@@ -120,7 +118,7 @@ async function runHeartbeatForChat(
   const ackMax = cfg.bot?.heartbeatAckMaxChars ?? 300;
 
   try {
-    const completion = await client.chat.completions.create({
+    const completion = await createChatCompletion(cfg, {
       model: getChatModel(cfg),
       messages: [
         {
@@ -134,7 +132,7 @@ async function runHeartbeatForChat(
         { role: 'system', content: `Recent messages:\n${recent || '(none)'}` },
       ],
       temperature: 0.2,
-      max_completion_tokens: maxTokens,
+      max_tokens: maxTokens,
     });
 
     let content = (completion.choices[0]?.message?.content ?? '').trim();
@@ -171,7 +169,6 @@ async function runHeartbeatForChat(
 }
 
 export function startHeartbeat(bot: TelegramBot, cfg: PixelTrailConfig, opts?: { queue?: ChatQueue }) {
-  const client = createChatClient(cfg);
   const guide = loadHeartbeatGuide();
   const intervalMs = (cfg.bot?.heartbeatIntervalHours ?? cfg.bot?.checkinIntervalHours ?? 24) * 60 * 60 * 1000;
   const maxTokens = cfg.bot?.heartbeatMaxTokens ?? 180;
@@ -179,7 +176,7 @@ export function startHeartbeat(bot: TelegramBot, cfg: PixelTrailConfig, opts?: {
   const tick = async () => {
     const chats = listChats();
     for (const chatId of chats) {
-      await runHeartbeatForChat(chatId, bot, client, cfg, guide, intervalMs, maxTokens, opts?.queue);
+      await runHeartbeatForChat(chatId, bot, cfg, guide, intervalMs, maxTokens, opts?.queue);
     }
   };
 
